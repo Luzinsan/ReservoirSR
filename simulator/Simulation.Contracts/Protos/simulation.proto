@@ -43,6 +43,12 @@ message StepSimulationResponse {
   double q_fld = 9;
   double diss = 10;
   double disq = 11;
+  double tbt = 12;
+  double tb = 13;
+  double tt = 14;
+  double q_oil_total = 15;
+  double q_oil_blocks = 16;
+  double q_oil_fractures = 17;
 }
 
 message GetFieldsRequest {

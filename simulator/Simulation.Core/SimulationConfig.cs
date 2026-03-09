@@ -134,6 +134,71 @@ public class SimulationConfig
         var json = File.ReadAllText(path);
         return JsonSerializer.Deserialize<SimulationConfig>(json) ?? new SimulationConfig();
     }
+
+    public SimulationConfig Clone()
+    {
+        return new SimulationConfig
+        {
+            NB = NB,
+            VL = VL,
+            LOD = LOD,
+            LIZ = LIZ,
+            R_Skv = R_Skv,
+            Ro1_PL = Ro1_PL,
+            Ro1_deg = Ro1_deg,
+            Mu1_PL = Mu1_PL,
+            Mu_Deg = Mu_Deg,
+            AP1 = AP1,
+            AT1 = AT1,
+            C_P_1 = C_P_1,
+            Ro3_PL = Ro3_PL,
+            Mu3_PL = Mu3_PL,
+            C_P_3 = C_P_3,
+            AP3 = AP3,
+            AT3 = AT3,
+            R00 = R00,
+            C_P_2 = C_P_2,
+            VesGMol = VesGMol,
+            YTAP2 = YTAP2,
+            DZT = DZT,
+            ZG = ZG,
+            R_C_R = R_C_R,
+            QUNT_CR = QUNT_CR,
+            RADZ0 = RADZ0,
+            SM = SM,
+            S_T_R = S_T_R,
+            VG0 = VG0,
+            PH0 = PH0,
+            BT = BT,
+            BG = BG,
+            Bt_Cp = Bt_Cp,
+            Bt_Tr = Bt_Tr,
+            MU_pazp = MU_pazp,
+            X_A = X_A,
+            X_D = X_D,
+            Q_zab = Q_zab,
+            OBV_P = OBV_P,
+            QQ = QQ,
+            P32 = P32,
+            TVK = TVK,
+            TK = TK,
+            LTVK = LTVK,
+            LTK = LTK,
+            DSO = DSO,
+            TU = TU,
+            N_Dr = N_Dr,
+            NX = NX,
+            EPSP = EPSP,
+            ENB = ENB,
+            EVB = EVB,
+            ENT = ENT,
+            EVT = EVT,
+            Tim_0 = Tim_0,
+            Tim_1 = Tim_1,
+            Tim_2 = Tim_2,
+            Layers = Layers.Select(layer => layer.Clone()).ToArray()
+        };
+    }
 }
 
 public class LayerConfig
@@ -150,4 +215,23 @@ public class LayerConfig
     public double SVB { get; set; }
     public double AKT { get; set; }
     public double AKB { get; set; }
+
+    public LayerConfig Clone()
+    {
+        return new LayerConfig
+        {
+            NZM = NZM,
+            HBM = HBM,
+            VMB = VMB,
+            VMT = VMT,
+            LWN = LWN,
+            LWD = LWD,
+            SNT = SNT,
+            SNB = SNB,
+            SVT = SVT,
+            SVB = SVB,
+            AKT = AKT,
+            AKB = AKB
+        };
+    }
 }

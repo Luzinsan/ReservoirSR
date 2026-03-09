@@ -6,139 +6,107 @@ namespace Simulation.Core.Runtime;
 
 public sealed class SimulationRuntime
 {
-    public Class_FPOR Engine { get; } = new();
+    private readonly object _gate = new();
+    private readonly ReservoirSimulationEngine _engine = new();
+    private bool _initialized;
 
     public void Initialize(SimulationConfig config)
     {
-        ThreadCulture();
-
-        if (config.NX % 2 != 0)
+        lock (_gate)
         {
-            config.NX += 1;
+            ThreadCulture();
+            _engine.ApplyConfig(config);
+            _engine.InitializeRuntimeState();
+            _initialized = true;
         }
-
-        Engine.ApplyConfig(config);
-
-        Engine.Create_Work_Dyn_Arrayes();
-
-        Engine.T = 0.0;
-        Engine.Q_zab = Engine.Q_zab / (2.0 * Math.PI);
-        Engine.QQ_ICX = Engine.Q_zab;
-
-        Engine.Prepaire_Of_Constants();
-        for (int k = 1; k <= Engine.NB; k++)
-        {
-            for (int i = 1 + Engine.NM[k - 1]; i <= Engine.NM[k]; i++)
-            {
-                Engine.HZM[i] = Engine.HM[k];
-                Engine.VPIT[i] = Engine.VMT[k] * Engine.HM[k] * Engine.HX * Engine.HX;
-                Engine.VPIB[i] = Engine.VMB[k] * Engine.HM[k] * Engine.HX * Engine.HX;
-            }
-        }
-
-        Engine.VPIT[0] = Engine.VPIT[1];
-        Engine.VPIB[0] = Engine.VPIB[1];
-        Engine.HZM[Engine.NZ + 1] = 0.0;
-
-        Engine.Evaluate_Of_Parameters();
-        Engine.Boundary_Conditions_And_Initial_Appr();
-        Engine.Initialization_Of_S0(false);
-        Engine.Prepeare_Of_Array_Abs_Permeability();
-        Engine.Cod_Exit = 15;
     }
 
 
     public SimulationStepResult Step(int stepCount)
     {
-        int count = Math.Max(stepCount, 1);
-        int stepsPerformed = 0;
-
-        for (int step = 0; step < count; step++)
+        lock (_gate)
         {
-            int kOut = 1;
-            Engine.Calc_Filt_Process_Pressure(false, ref kOut);
-            if (kOut == -1)
+            EnsureInitialized();
+
+            int count = Math.Max(stepCount, 1);
+            int stepsPerformed = 0;
+
+            for (int step = 0; step < count; step++)
             {
-                throw new InvalidOperationException("Calc_Filt_Process_Pressure failed.");
+                _engine.AdvanceSingleStep();
+                stepsPerformed += 1;
             }
 
-            Engine.Saturation_and_Main_Characts(false, ref kOut);
-            if (kOut == -1)
-            {
-                throw new InvalidOperationException("Saturation_and_Main_Characts failed.");
-            }
-
-            Engine.T_Tek += Engine.TU;
-            Engine.T += Engine.TU;
-            for (int k = 1; k <= Engine.N1; k++)
-            {
-                Engine.P_0[k] = Engine.P[k];
-            }
-
-            stepsPerformed += 1;
+            return BuildStepResult(stepsPerformed);
         }
-
-        return BuildStepResult(stepsPerformed);
     }
 
-    public double[] GetField(string fieldName)
+    public void GetFieldTo(string fieldName, IList<double> destination)
     {
-        string key = fieldName.Trim().ToUpperInvariant();
-        return key switch
+        lock (_gate)
         {
-            "P" => CopyField(Engine.P),
-            "P0" => CopyField(Engine.P_0),
-            "ST" => CopyField(Engine.ST),
-            "SB" => CopyField(Engine.SB),
-            "WT" => CopyField(Engine.WT),
-            "WB" => CopyField(Engine.WB),
-            "AX" => CopyField(Engine.AX),
-            "AV" => CopyField(Engine.AV),
-            "KABX" => CopyField(Engine.Kabx),
-            "KABZ" => CopyField(Engine.Kabz),
-            "AVST" => CopyField(Engine.AVST),
-            "AVSB" => CopyField(Engine.AVSB),
-            "AT" => CopyField(Engine.AT),
-            "AB" => CopyField(Engine.AB),
-            "BT" => CopyField(Engine.BT),
-            "BB" => CopyField(Engine.BB),
-            "BVT" => CopyField(Engine.BVT),
-            "BVB" => CopyField(Engine.BVB),
-            "CBET" => CopyField(Engine.CBet),
-            _ => throw new ArgumentOutOfRangeException(nameof(fieldName), $"Unknown field: {fieldName}")
-        };
+            EnsureInitialized();
+            _engine.ExportFieldTo(fieldName, destination);
+        }
+    }
+
+    public SimulationRuntimeMetadata GetMetadata()
+    {
+        lock (_gate)
+        {
+            EnsureInitialized();
+            return new SimulationRuntimeMetadata(
+                _engine.NX,
+                _engine.NZ,
+                _engine.TU,
+                _engine.N_Dr,
+                _engine.EPSP,
+                _engine.TK,
+                _engine.Bt_Cp,
+                _engine.Bt_Tr,
+                _engine.ConfiguredQZab,
+                _engine.P32,
+                _engine.MU_pazp
+            );
+        }
     }
 
     private SimulationStepResult BuildStepResult(int stepsPerformed)
     {
+        double qOilBlocks = ConvertRecoveryPercentToVolume(_engine.TB, _engine.VNEB);
+        double qOilFractures = ConvertRecoveryPercentToVolume(_engine.TT, _engine.VNET);
+        double qOilTotal = ConvertRecoveryPercentToVolume(_engine.TBT, _engine.VNE);
+
         return new SimulationStepResult(
             stepsPerformed,
-            Engine.T,
-            Engine.AI,
-            Engine.AIT,
-            Engine.AIB,
-            Engine.P_zab_DC,
-            Engine.Q_fld,
-            Engine.DISS,
-            Engine.DISQ
+            _engine.T,
+            _engine.AI,
+            _engine.AIT,
+            _engine.AIB,
+            _engine.P_zab_DC,
+            _engine.Q_fld,
+            _engine.DISS,
+            _engine.DISQ,
+            _engine.TBT,
+            _engine.TB,
+            _engine.TT,
+            qOilTotal,
+            qOilBlocks,
+            qOilFractures
         );
     }
 
-    private double[] CopyField(double[] source)
+    private static double ConvertRecoveryPercentToVolume(double recoveryPercent, double netVolume)
     {
-        int n = Engine.NX * Engine.NZ;
-        var result = new double[n];
-        int idx = 0;
-        for (int kz = 1; kz <= Engine.NZ; kz++)
-        {
-            for (int ix = 1; ix <= Engine.NX; ix++)
-            {
-                int m = kz + ix * Engine.NZ;
-                result[idx++] = source[m];
-            }
-        }
+        return recoveryPercent * netVolume / 100000.0;
+    }
 
-        return result;
+    private void EnsureInitialized()
+    {
+        if (!_initialized)
+        {
+            throw new InvalidOperationException("Simulation runtime is not initialized.");
+        }
     }
 
     private static void ThreadCulture()
@@ -159,5 +127,25 @@ public sealed record SimulationStepResult(
     double Pzab,
     double QFld,
     double Diss,
-    double Disq
+    double Disq,
+    double Tbt,
+    double Tb,
+    double Tt,
+    double QOilTotal,
+    double QOilBlocks,
+    double QOilFractures
+);
+
+public sealed record SimulationRuntimeMetadata(
+    int Nx,
+    int Nz,
+    double TimeStepDays,
+    int DrainageSubsteps,
+    double PressureTolerance,
+    double TkDays,
+    double BtCp,
+    double BtTr,
+    double ConfiguredQZab,
+    double P32,
+    double MuPazp
 );

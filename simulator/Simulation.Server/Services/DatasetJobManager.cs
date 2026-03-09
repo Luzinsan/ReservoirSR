@@ -7,12 +7,23 @@ namespace Simulation.Server.Services;
 
 public sealed class DatasetJobManager
 {
+    private static readonly string[] ScalarSeriesNames =
+    [
+        "times", "AI", "AIT", "AIB", "P_zab", "Q_fld", "DISS", "DISQ", "TBT", "TB", "TT", "Q_oil_total", "Q_oil_blocks", "Q_oil_fractures"
+    ];
+
     private static readonly string[] SpatialFieldNames =
     [
         "P", "P0", "ST", "SB", "WT", "WB", "AVST", "AVSB", "AT", "AB", "BT", "BB", "BVT", "BVB", "CBET"
     ];
 
     private readonly ConcurrentDictionary<string, DatasetJobStatus> _jobs = new(StringComparer.Ordinal);
+    private readonly ILogger<DatasetJobManager> _logger;
+
+    public DatasetJobManager(ILogger<DatasetJobManager> logger)
+    {
+        _logger = logger;
+    }
 
     public DatasetJobStatus Start(RunDatasetSpec spec)
     {
@@ -23,6 +34,7 @@ public sealed class DatasetJobManager
             throw new InvalidOperationException($"Job '{jobId}' already exists.");
         }
 
+        _logger.LogInformation("Queue dataset job {JobId} output={OutputDir} steps={TotalSteps}", jobId, spec.OutputDir, spec.TotalSteps);
         _ = Task.Run(() => RunJobAsync(spec with { JobId = jobId }));
         return status;
     }
@@ -40,7 +52,13 @@ public sealed class DatasetJobManager
         }
 
         _jobs[jobId] = status with { State = "cancelled", Message = "Cancelled by user." };
+        _logger.LogInformation("Dataset job cancelled {JobId}", jobId);
         return true;
+    }
+
+    public bool Remove(string jobId)
+    {
+        return _jobs.TryRemove(jobId, out _);
     }
 
     private async Task RunJobAsync(RunDatasetSpec spec)
@@ -53,31 +71,62 @@ public sealed class DatasetJobManager
 
             var runtime = new SimulationRuntime();
             runtime.Initialize(spec.Config);
+            var metadata = runtime.GetMetadata();
+            string reportPath = Path.Combine(caseDir, "report.json");
+            using var reportWriter = new SimulationReportWriter(reportPath, spec, runtime);
 
             int steps = spec.TotalSteps;
             SetStatus(spec.JobId, "running", "Running", 0, steps, caseDir);
+            _logger.LogInformation("Dataset job running {JobId} caseDir={CaseDir}", spec.JobId, caseDir);
 
-            var fieldWriters = new Dictionary<string, BinaryWriter>(StringComparer.OrdinalIgnoreCase);
+            // Preallocate arrays for fields
+            var fieldData = new Dictionary<string, double[]>(StringComparer.OrdinalIgnoreCase);
+            int n = metadata.Nx * metadata.Nz;
             foreach (string field in SpatialFieldNames)
             {
-                fieldWriters[field] = new BinaryWriter(File.Open(Path.Combine(caseDir, $"{field}.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
+                fieldData[field] = new double[n];
             }
-            using var bwTime = new BinaryWriter(File.Open(Path.Combine(caseDir, "times.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-            using var bwAI = new BinaryWriter(File.Open(Path.Combine(caseDir, "AI.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-            using var bwAIT = new BinaryWriter(File.Open(Path.Combine(caseDir, "AIT.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-            using var bwAIB = new BinaryWriter(File.Open(Path.Combine(caseDir, "AIB.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-            using var bwPz = new BinaryWriter(File.Open(Path.Combine(caseDir, "P_zab.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-            using var bwQFld = new BinaryWriter(File.Open(Path.Combine(caseDir, "Q_fld.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-            using var bwDiss = new BinaryWriter(File.Open(Path.Combine(caseDir, "DISS.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-            using var bwDisq = new BinaryWriter(File.Open(Path.Combine(caseDir, "DISQ.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-            int? observedNz = null;
 
+            var disposables = new List<IDisposable>();
             try
             {
+                var fieldWriters = new Dictionary<string, BinaryWriter>(StringComparer.OrdinalIgnoreCase);
+                foreach (string field in SpatialFieldNames)
+                {
+                    var bw = new BinaryWriter(File.Open(Path.Combine(caseDir, $"{field}.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
+                    disposables.Add(bw);
+                    fieldWriters[field] = bw;
+                }
+
+                BinaryWriter CreateBw(string name)
+                {
+                    var bw = new BinaryWriter(File.Open(Path.Combine(caseDir, $"{name}.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
+                    disposables.Add(bw);
+                    return bw;
+                }
+
+                var bwTime = CreateBw("times");
+                var bwAI = CreateBw("AI");
+                var bwAIT = CreateBw("AIT");
+                var bwAIB = CreateBw("AIB");
+                var bwPz = CreateBw("P_zab");
+                var bwQFld = CreateBw("Q_fld");
+                var bwDiss = CreateBw("DISS");
+                var bwDisq = CreateBw("DISQ");
+                var bwTbt = CreateBw("TBT");
+                var bwTb = CreateBw("TB");
+                var bwTt = CreateBw("TT");
+                var bwQOilTotal = CreateBw("Q_oil_total");
+                var bwQOilBlocks = CreateBw("Q_oil_blocks");
+                var bwQOilFractures = CreateBw("Q_oil_fractures");
+
+                int? observedNz = null;
+
                 for (int step = 0; step < steps; step++)
                 {
                     if (IsCancelled(spec.JobId))
                     {
+                        _logger.LogInformation("Dataset job observed cancellation {JobId} at step {Step}", spec.JobId, step);
                         return;
                     }
 
@@ -90,21 +139,28 @@ public sealed class DatasetJobManager
                     bwQFld.Write(result.QFld);
                     bwDiss.Write(result.Diss);
                     bwDisq.Write(result.Disq);
+                    bwTbt.Write(result.Tbt);
+                    bwTb.Write(result.Tb);
+                    bwTt.Write(result.Tt);
+                    bwQOilTotal.Write(result.QOilTotal);
+                    bwQOilBlocks.Write(result.QOilBlocks);
+                    bwQOilFractures.Write(result.QOilFractures);
 
-                    var fieldData = new Dictionary<string, double[]>(StringComparer.OrdinalIgnoreCase);
                     foreach (string field in SpatialFieldNames)
                     {
-                        double[] values = runtime.GetField(field);
-                        fieldData[field] = values;
+                        double[] values = fieldData[field];
+                        runtime.GetFieldTo(field, values);
                         foreach (double value in values)
                         {
                             fieldWriters[field].Write(value);
                         }
                     }
 
+                    reportWriter.WriteStep(step + 1, result, fieldData);
+
                     if (observedNz is null)
                     {
-                        int nx = runtime.Engine.NX;
+                        int nx = metadata.Nx;
                         int pCount = fieldData["P"].Length;
                         if (nx <= 0 || pCount % nx != 0)
                         {
@@ -112,38 +168,40 @@ public sealed class DatasetJobManager
                         }
 
                         observedNz = pCount / nx;
-                        WriteMeta(caseDir, runtime, steps, observedNz.Value);
+                        WriteMeta(caseDir, metadata, steps, observedNz.Value);
                     }
 
                     if (spec.CaptureEveryStep)
                     {
                         foreach ((string field, double[] values) in fieldData)
                         {
-                            SaveFieldCsv(Path.Combine(caseDir, $"{field}_{step}.csv"), values, runtime.Engine.NX, observedNz ?? runtime.Engine.NZ);
+                            SaveFieldCsv(Path.Combine(caseDir, $"{field}_{step}.csv"), values, metadata.Nx, observedNz ?? metadata.Nz);
                         }
                     }
 
                     SetStatus(spec.JobId, "running", "Running", step + 1, steps, caseDir);
                     await Task.Yield();
                 }
+
+                if (observedNz is null)
+                {
+                    WriteMeta(caseDir, metadata, steps, metadata.Nz);
+                }
+                SetStatus(spec.JobId, "completed", "Completed", steps, steps, caseDir);
+                _logger.LogInformation("Dataset job completed {JobId}. report={ReportPath}", spec.JobId, reportPath);
             }
             finally
             {
-                foreach (BinaryWriter writer in fieldWriters.Values)
+                foreach (var d in Enumerable.Reverse(disposables))
                 {
-                    writer.Dispose();
+                    d.Dispose();
                 }
             }
-
-            if (observedNz is null)
-            {
-                WriteMeta(caseDir, runtime, steps, runtime.Engine.NZ);
-            }
-            SetStatus(spec.JobId, "completed", "Completed", steps, steps, caseDir);
         }
         catch (Exception ex)
         {
             SetStatus(spec.JobId, "failed", ex.Message, 0, spec.TotalSteps, spec.OutputDir);
+            _logger.LogError(ex, "Dataset job failed {JobId}", spec.JobId);
         }
     }
 
@@ -153,36 +211,35 @@ public sealed class DatasetJobManager
         int idx = 0;
         for (int kz = 0; kz < nz; kz++)
         {
-            var row = new string[nx];
             for (int ix = 0; ix < nx; ix++)
             {
-                row[ix] = arr[idx++].ToString("R", CultureInfo.InvariantCulture);
+                if (ix > 0) w.Write(',');
+                w.Write(arr[idx++].ToString("R", CultureInfo.InvariantCulture));
             }
-
-            w.WriteLine(string.Join(",", row));
+            w.WriteLine();
         }
     }
 
-    private static void WriteMeta(string caseDir, SimulationRuntime runtime, int steps, int nz)
+    private static void WriteMeta(string caseDir, SimulationRuntimeMetadata metadata, int steps, int nz)
     {
         var obj = new
         {
             steps,
-            nx = runtime.Engine.NX,
+            nx = metadata.Nx,
             nz,
-            tu = runtime.Engine.TU,
+            tu = metadata.TimeStepDays,
             spatial_fields = SpatialFieldNames,
-            scalar_series = new[] { "times", "AI", "AIT", "AIB", "P_zab", "Q_fld", "DISS", "DISQ" },
+            scalar_series = ScalarSeriesNames,
             static_params = new
             {
-                runtime.Engine.N_Dr,
-                runtime.Engine.EPSP,
-                runtime.Engine.TK,
-                runtime.Engine.Bt_Cp,
-                runtime.Engine.Bt_Tr,
-                runtime.Engine.Q_zab,
-                runtime.Engine.P32,
-                runtime.Engine.MU_pazp
+                N_Dr = metadata.DrainageSubsteps,
+                EPSP = metadata.PressureTolerance,
+                TK = metadata.TkDays,
+                Bt_Cp = metadata.BtCp,
+                Bt_Tr = metadata.BtTr,
+                Q_zab = metadata.ConfiguredQZab,
+                metadata.P32,
+                MU_pazp = metadata.MuPazp
             }
         };
         File.WriteAllText(Path.Combine(caseDir, "meta.json"), JsonSerializer.Serialize(obj));

@@ -7,83 +7,87 @@ namespace Simulation.Server.Services;
 
 internal static class SimulationConfigMapper
 {
+    private static int Map(int val, int def) => val > 0 ? val : def;
+    private static double Map(double val, double def) => val > 0 ? val : def;
+
     public static CoreConfig ToCoreConfig(ContractsConfig? source)
     {
-        if (source is null || source.CalculateSize() == 0)
+        var def = new CoreConfig();
+        if (source is null)
         {
-            return new CoreConfig();
+            return def;
         }
 
         var config = new CoreConfig
         {
-            NB = source.Nb,
-            VL = source.Vl,
+            NB = Map(source.Nb, def.NB),
+            VL = Map(source.Vl, def.VL),
             LOD = source.Lod,
-            LIZ = source.Liz,
-            R_Skv = source.RSkv,
+            LIZ = Map(source.Liz, def.LIZ),
+            R_Skv = Map(source.RSkv, def.R_Skv),
 
-            Ro1_PL = source.Ro1Pl,
-            Ro1_deg = source.Ro1Deg,
-            Mu1_PL = source.Mu1Pl,
-            Mu_Deg = source.MuDeg,
-            AP1 = source.Ap1,
-            AT1 = source.At1,
-            C_P_1 = source.CP1,
+            Ro1_PL = Map(source.Ro1Pl, def.Ro1_PL),
+            Ro1_deg = Map(source.Ro1Deg, def.Ro1_deg),
+            Mu1_PL = Map(source.Mu1Pl, def.Mu1_PL),
+            Mu_Deg = Map(source.MuDeg, def.Mu_Deg),
+            AP1 = Map(source.Ap1, def.AP1),
+            AT1 = Map(source.At1, def.AT1),
+            C_P_1 = Map(source.CP1, def.C_P_1),
 
-            Ro3_PL = source.Ro3Pl,
-            Mu3_PL = source.Mu3Pl,
-            C_P_3 = source.CP3,
-            AP3 = source.Ap3,
-            AT3 = source.At3,
+            Ro3_PL = Map(source.Ro3Pl, def.Ro3_PL),
+            Mu3_PL = Map(source.Mu3Pl, def.Mu3_PL),
+            C_P_3 = Map(source.CP3, def.C_P_3),
+            AP3 = Map(source.Ap3, def.AP3),
+            AT3 = Map(source.At3, def.AT3),
 
-            R00 = source.R00,
-            C_P_2 = source.CP2,
-            VesGMol = source.VesGMol,
-            YTAP2 = source.Ytap2,
-            DZT = source.Dzt,
-            ZG = source.Zg,
-            R_C_R = source.RCR,
-            QUNT_CR = source.QuntCr,
-            RADZ0 = source.Radz0,
-            SM = source.Sm,
-            S_T_R = source.STR,
+            R00 = Map(source.R00, def.R00),
+            C_P_2 = Map(source.CP2, def.C_P_2),
+            VesGMol = Map(source.VesGMol, def.VesGMol),
+            YTAP2 = Map(source.Ytap2, def.YTAP2),
+            DZT = Map(source.Dzt, def.DZT),
+            ZG = Map(source.Zg, def.ZG),
+            R_C_R = Map(source.RCR, def.R_C_R),
+            QUNT_CR = Map(source.QuntCr, def.QUNT_CR),
+            RADZ0 = Map(source.Radz0, def.RADZ0),
+            SM = Map(source.Sm, def.SM),
+            S_T_R = Map(source.STR, def.S_T_R),
 
-            VG0 = source.Vg0,
-            PH0 = source.Ph0,
-            BT = source.Bt,
-            BG = source.Bg,
+            VG0 = Map(source.Vg0, def.VG0),
+            PH0 = Map(source.Ph0, def.PH0),
+            BT = Map(source.Bt, def.BT),
+            BG = Map(source.Bg, def.BG),
 
-            Bt_Cp = source.BtCp,
-            Bt_Tr = source.BtTr,
+            Bt_Cp = Map(source.BtCp, def.Bt_Cp),
+            Bt_Tr = Map(source.BtTr, def.Bt_Tr),
 
-            MU_pazp = source.MuPazp,
-            X_A = source.XA,
-            X_D = source.XD,
+            MU_pazp = Map(source.MuPazp, def.MU_pazp),
+            X_A = Map(source.XA, def.X_A),
+            X_D = Map(source.XD, def.X_D),
 
-            Q_zab = source.QZab,
-            OBV_P = source.ObvP,
-            QQ = source.Qq,
-            P32 = source.P32,
+            Q_zab = Map(source.QZab, def.Q_zab),
+            OBV_P = Map(source.ObvP, def.OBV_P),
+            QQ = Map(source.Qq, def.QQ),
+            P32 = Map(source.P32, def.P32),
 
-            TVK = source.Tvk,
-            TK = source.TkDays,
+            TVK = Map(source.Tvk, def.TVK),
+            TK = Map(source.TkDays, def.TK),
             LTVK = source.Ltvk,
-            LTK = source.Ltk,
-            DSO = source.Dso,
+            LTK = Map(source.Ltk, def.LTK),
+            DSO = Map(source.Dso, def.DSO),
 
-            TU = source.TuSeconds / 86400.0,
-            N_Dr = source.NDr,
-            NX = source.Nx,
+            TU = source.TuSeconds > 0 ? source.TuSeconds / 86400.0 : def.TU,
+            N_Dr = Map(source.NDr, def.N_Dr),
+            NX = Map(source.Nx, def.NX),
 
-            EPSP = source.Epsp,
-            ENB = source.Enb,
-            EVB = source.Evb,
-            ENT = source.Ent,
-            EVT = source.Evt,
+            EPSP = Map(source.Epsp, def.EPSP),
+            ENB = Map(source.Enb, def.ENB),
+            EVB = Map(source.Evb, def.EVB),
+            ENT = Map(source.Ent, def.ENT),
+            EVT = Map(source.Evt, def.EVT),
 
-            Tim_0 = source.Tim0,
-            Tim_1 = source.Tim1,
-            Tim_2 = source.Tim2
+            Tim_0 = Map(source.Tim0, def.Tim_0),
+            Tim_1 = Map(source.Tim1, def.Tim_1),
+            Tim_2 = Map(source.Tim2, def.Tim_2)
         };
 
         if (source.Layers.Count > 0)
@@ -97,20 +101,21 @@ internal static class SimulationConfigMapper
 
     private static CoreLayerConfig ToCoreLayer(ContractsLayerConfig layer)
     {
+        var def = new CoreLayerConfig();
         return new CoreLayerConfig
         {
-            NZM = layer.Nzm,
-            HBM = layer.Hbm,
-            VMB = layer.Vmb,
-            VMT = layer.Vmt,
+            NZM = Map(layer.Nzm, def.NZM),
+            HBM = Map(layer.Hbm, def.HBM),
+            VMB = Map(layer.Vmb, def.VMB),
+            VMT = Map(layer.Vmt, def.VMT),
             LWN = layer.Lwn,
             LWD = layer.Lwd,
-            SNT = layer.Snt,
-            SNB = layer.Snb,
-            SVT = layer.Svt,
-            SVB = layer.Svb,
-            AKT = layer.Akt,
-            AKB = layer.Akb
+            SNT = Map(layer.Snt, def.SNT),
+            SNB = Map(layer.Snb, def.SNB),
+            SVT = Map(layer.Svt, def.SVT),
+            SVB = Map(layer.Svb, def.SVB),
+            AKT = Map(layer.Akt, def.AKT),
+            AKB = Map(layer.Akb, def.AKB)
         };
     }
 }

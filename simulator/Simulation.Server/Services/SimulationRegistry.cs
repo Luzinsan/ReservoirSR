@@ -7,16 +7,14 @@ public sealed class SimulationRegistry
 {
     private readonly ConcurrentDictionary<string, SimulationRuntime> _runtimes = new(StringComparer.Ordinal);
 
-    public SimulationRuntime CreateOrReplace(string simulationId)
+    public void AddOrReplace(string simulationId, SimulationRuntime runtime)
     {
-        var runtime = new SimulationRuntime();
         _runtimes.AddOrUpdate(simulationId, runtime, (_, _) => runtime);
-        return runtime;
     }
 
-    public SimulationRuntime GetOrCreate(string simulationId)
+    public bool Remove(string simulationId)
     {
-        return _runtimes.GetOrAdd(simulationId, _ => new SimulationRuntime());
+        return _runtimes.TryRemove(simulationId, out _);
     }
 
     public bool TryGet(string simulationId, out SimulationRuntime runtime)
