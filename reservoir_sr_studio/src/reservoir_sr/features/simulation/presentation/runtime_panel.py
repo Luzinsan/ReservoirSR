@@ -2,19 +2,10 @@ from __future__ import annotations
 
 from PySide6 import QtWidgets
 
-from reservoir_sr.features.simulation.presentation.dataset_view_panel import DatasetViewPanel
-
-
-class RuntimePanel(QtWidgets.QGroupBox):
+class RuntimePanel(QtWidgets.QWidget):
     def __init__(self) -> None:
-        super().__init__("Источник данных")
-        layout = QtWidgets.QVBoxLayout(self)
-
-        self.mode_tabs = QtWidgets.QTabWidget()
-        layout.addWidget(self.mode_tabs)
-
-        runtime_tab = QtWidgets.QWidget()
-        runtime_form = QtWidgets.QFormLayout(runtime_tab)
+        super().__init__()
+        runtime_form = QtWidgets.QFormLayout(self)
 
         self.endpoint_edit = QtWidgets.QLineEdit("localhost:5000")
         self.simulation_id_edit = QtWidgets.QLineEdit("sim_main")
@@ -53,7 +44,3 @@ class RuntimePanel(QtWidgets.QGroupBox):
         runtime_form.addRow("step_batch", self.batch_spin)
         runtime_form.addRow("timer (ms)", self.timer_spin)
 
-        self.mode_tabs.addTab(runtime_tab, "Runtime")
-
-        self.dataset_panel = DatasetViewPanel()
-        self.mode_tabs.addTab(self.dataset_panel, "Dataset")
