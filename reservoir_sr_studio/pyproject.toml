@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "reservoir-sr-studio"
+version = "0.1.0"
+description = "PyQt desktop studio for reservoir super-resolution workflows."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+  { name = "Luzinsan" }
+]
+dependencies = [
+  "grpcio>=1.71",
+  "numpy>=1.26",
+  "PySide6>=6.8",
+  "pyqtgraph>=0.13",
+]
+
+[project.optional-dependencies]
+data = [
+  "numba>=0.61",
+  "numcodecs>=0.15",
+  "zarr>=2.18",
+]
+dev = [
+  "grpcio-tools>=1.71",
+  "pytest>=8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reservoir_sr"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/reservoir_sr",
+  "tests",
+  "README.md",
+  "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
