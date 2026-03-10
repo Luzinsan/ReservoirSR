@@ -18,15 +18,16 @@ dependencies = [
   "pyqtgraph>=0.13",
 ]
 
+[project.scripts]
+reservoir-sr-studio = "reservoir_sr.app.__main__:main"
+reservoir-sr-build-dataset = "reservoir_sr.tools.build_dataset:main"
+reservoir-sr-generate-proto = "reservoir_sr.tools.generate_proto:main"
+
 [project.optional-dependencies]
-data = [
-  "numba>=0.61",
-  "numcodecs>=0.15",
-  "zarr>=2.18",
-]
 dev = [
   "grpcio-tools>=1.71",
   "pytest>=8.0",
+  "ruff>=0.11",
 ]
 
 [tool.hatch.build.targets.wheel]
