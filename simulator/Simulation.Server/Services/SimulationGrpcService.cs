@@ -159,8 +159,7 @@ public sealed class SimulationGrpcService(
                 request.JobId,
                 string.IsNullOrWhiteSpace(request.OutputDir) ? "dataset_out" : request.OutputDir,
                 SimulationConfigMapper.ToCoreConfig(request.Config),
-                request.TrajectorySteps > 0 ? request.TrajectorySteps : Math.Max(request.MaxSteps, 1),
-                request.CaptureEveryStep
+                request.Steps > 0 ? request.Steps : 1
             );
 
             var status = jobManager.Start(spec);
@@ -204,7 +203,7 @@ public sealed class SimulationGrpcService(
             Message = status.Message,
             StepsDone = status.StepsDone,
             StepsTotal = status.StepsTotal,
-            OutputDir = status.OutputDir
+            OutputPath = status.OutputPath
         });
     }
 

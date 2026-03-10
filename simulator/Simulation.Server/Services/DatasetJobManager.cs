@@ -1,21 +1,12 @@
+using Simulation.Core;
 using Simulation.Core.Runtime;
 using System.Collections.Concurrent;
-using System.Globalization;
-using System.Text.Json;
-
 namespace Simulation.Server.Services;
 
 public sealed class DatasetJobManager
 {
-    private static readonly string[] ScalarSeriesNames =
-    [
-        "times", "AI", "AIT", "AIB", "P_zab", "Q_fld", "DISS", "DISQ", "TBT", "TB", "TT", "Q_oil_total", "Q_oil_blocks", "Q_oil_fractures"
-    ];
-
-    private static readonly string[] SpatialFieldNames =
-    [
-        "P", "P0", "ST", "SB", "WT", "WB", "AVST", "AVSB", "AT", "AB", "BT", "BB", "BVT", "BVB", "CBET"
-    ];
+    private const int ScaleFactor = 4;
+    private static readonly string[] DatasetFields = ["P", "ST", "SB"];
 
     private readonly ConcurrentDictionary<string, DatasetJobStatus> _jobs = new(StringComparer.Ordinal);
     private readonly ILogger<DatasetJobManager> _logger;
@@ -63,186 +54,137 @@ public sealed class DatasetJobManager
 
     private async Task RunJobAsync(RunDatasetSpec spec)
     {
+        string outputPath = Path.Combine(spec.OutputDir, $"{spec.JobId}.npz");
+        string tempPath = outputPath + ".tmp";
         try
         {
             Directory.CreateDirectory(spec.OutputDir);
-            string caseDir = Path.Combine(spec.OutputDir, spec.JobId);
-            Directory.CreateDirectory(caseDir);
 
-            var runtime = new SimulationRuntime();
-            runtime.Initialize(spec.Config);
-            var metadata = runtime.GetMetadata();
-            string reportPath = Path.Combine(caseDir, "report.json");
-            using var reportWriter = new SimulationReportWriter(reportPath, spec, runtime);
+            ValidateDatasetConfig(spec.Config);
+            SimulationConfig hrConfig = BuildHrConfig(spec.Config);
+
+            var lrRuntime = new SimulationRuntime();
+            var hrRuntime = new SimulationRuntime();
+            lrRuntime.Initialize(spec.Config);
+            hrRuntime.Initialize(hrConfig);
+
+            SimulationRuntimeMetadata lrMetadata = lrRuntime.GetMetadata();
+            SimulationRuntimeMetadata hrMetadata = hrRuntime.GetMetadata();
 
             int steps = spec.TotalSteps;
-            SetStatus(spec.JobId, "running", "Running", 0, steps, caseDir);
-            _logger.LogInformation("Dataset job running {JobId} caseDir={CaseDir}", spec.JobId, caseDir);
+            SetStatus(spec.JobId, "running", "Running", 0, steps, outputPath);
+            _logger.LogInformation("Dataset job running {JobId} output={OutputPath}", spec.JobId, outputPath);
 
-            // Preallocate arrays for fields
-            var fieldData = new Dictionary<string, double[]>(StringComparer.OrdinalIgnoreCase);
-            int n = metadata.Nx * metadata.Nz;
-            foreach (string field in SpatialFieldNames)
+            using (var writer = new SrSimulationArchiveWriter(tempPath, spec.JobId, steps, spec.Config, hrConfig, lrMetadata, hrMetadata))
             {
-                fieldData[field] = new double[n];
-            }
+                int lrDone = 0;
+                int hrDone = 0;
 
-            var disposables = new List<IDisposable>();
-            try
-            {
-                var fieldWriters = new Dictionary<string, BinaryWriter>(StringComparer.OrdinalIgnoreCase);
-                foreach (string field in SpatialFieldNames)
+                Task lrTask = Task.Run(async () =>
                 {
-                    var bw = new BinaryWriter(File.Open(Path.Combine(caseDir, $"{field}.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-                    disposables.Add(bw);
-                    fieldWriters[field] = bw;
-                }
+                    double[] pressure = new double[lrMetadata.Nx * lrMetadata.Nz];
+                    double[] saturationFractures = new double[lrMetadata.Nx * lrMetadata.Nz];
+                    double[] saturationBlocks = new double[lrMetadata.Nx * lrMetadata.Nz];
 
-                BinaryWriter CreateBw(string name)
-                {
-                    var bw = new BinaryWriter(File.Open(Path.Combine(caseDir, $"{name}.bin"), FileMode.Create, FileAccess.Write, FileShare.None));
-                    disposables.Add(bw);
-                    return bw;
-                }
-
-                var bwTime = CreateBw("times");
-                var bwAI = CreateBw("AI");
-                var bwAIT = CreateBw("AIT");
-                var bwAIB = CreateBw("AIB");
-                var bwPz = CreateBw("P_zab");
-                var bwQFld = CreateBw("Q_fld");
-                var bwDiss = CreateBw("DISS");
-                var bwDisq = CreateBw("DISQ");
-                var bwTbt = CreateBw("TBT");
-                var bwTb = CreateBw("TB");
-                var bwTt = CreateBw("TT");
-                var bwQOilTotal = CreateBw("Q_oil_total");
-                var bwQOilBlocks = CreateBw("Q_oil_blocks");
-                var bwQOilFractures = CreateBw("Q_oil_fractures");
-
-                int? observedNz = null;
-
-                for (int step = 0; step < steps; step++)
-                {
-                    if (IsCancelled(spec.JobId))
+                    for (int step = 0; step < steps; step++)
                     {
-                        _logger.LogInformation("Dataset job observed cancellation {JobId} at step {Step}", spec.JobId, step);
-                        return;
-                    }
-
-                    var result = runtime.Step(1);
-                    bwTime.Write(result.Time);
-                    bwAI.Write(result.Ai);
-                    bwAIT.Write(result.Ait);
-                    bwAIB.Write(result.Aib);
-                    bwPz.Write(result.Pzab);
-                    bwQFld.Write(result.QFld);
-                    bwDiss.Write(result.Diss);
-                    bwDisq.Write(result.Disq);
-                    bwTbt.Write(result.Tbt);
-                    bwTb.Write(result.Tb);
-                    bwTt.Write(result.Tt);
-                    bwQOilTotal.Write(result.QOilTotal);
-                    bwQOilBlocks.Write(result.QOilBlocks);
-                    bwQOilFractures.Write(result.QOilFractures);
-
-                    foreach (string field in SpatialFieldNames)
-                    {
-                        double[] values = fieldData[field];
-                        runtime.GetFieldTo(field, values);
-                        foreach (double value in values)
+                        if (IsCancelled(spec.JobId))
                         {
-                            fieldWriters[field].Write(value);
-                        }
-                    }
-
-                    reportWriter.WriteStep(step + 1, result, fieldData);
-
-                    if (observedNz is null)
-                    {
-                        int nx = metadata.Nx;
-                        int pCount = fieldData["P"].Length;
-                        if (nx <= 0 || pCount % nx != 0)
-                        {
-                            throw new InvalidOperationException($"Cannot infer NZ from P field length={pCount} and NX={nx}.");
+                            return;
                         }
 
-                        observedNz = pCount / nx;
-                        WriteMeta(caseDir, metadata, steps, observedNz.Value);
+                        SimulationStepResult result = lrRuntime.Step(1);
+                        ExportFields(lrRuntime, pressure, saturationFractures, saturationBlocks);
+                        writer.WriteLrStep(pressure, saturationFractures, saturationBlocks);
+                        writer.WriteDynamicStep(result);
+                        int done = Interlocked.Exchange(ref lrDone, step + 1);
+                        _ = done;
+                        SetStatus(spec.JobId, "running", "Running", Math.Min(lrDone, hrDone), steps, outputPath);
+                        await Task.Yield();
                     }
+                });
 
-                    if (spec.CaptureEveryStep)
+                Task hrTask = Task.Run(async () =>
+                {
+                    double[] pressure = new double[hrMetadata.Nx * hrMetadata.Nz];
+                    double[] saturationFractures = new double[hrMetadata.Nx * hrMetadata.Nz];
+                    double[] saturationBlocks = new double[hrMetadata.Nx * hrMetadata.Nz];
+
+                    for (int step = 0; step < steps; step++)
                     {
-                        foreach ((string field, double[] values) in fieldData)
+                        if (IsCancelled(spec.JobId))
                         {
-                            SaveFieldCsv(Path.Combine(caseDir, $"{field}_{step}.csv"), values, metadata.Nx, observedNz ?? metadata.Nz);
+                            return;
                         }
+
+                        _ = hrRuntime.Step(1);
+                        ExportFields(hrRuntime, pressure, saturationFractures, saturationBlocks);
+                        writer.WriteHrStep(pressure, saturationFractures, saturationBlocks);
+                        int done = Interlocked.Exchange(ref hrDone, step + 1);
+                        _ = done;
+                        SetStatus(spec.JobId, "running", "Running", Math.Min(lrDone, hrDone), steps, outputPath);
+                        await Task.Yield();
                     }
+                });
 
-                    SetStatus(spec.JobId, "running", "Running", step + 1, steps, caseDir);
-                    await Task.Yield();
-                }
+                await Task.WhenAll(lrTask, hrTask);
 
-                if (observedNz is null)
+                if (IsCancelled(spec.JobId))
                 {
-                    WriteMeta(caseDir, metadata, steps, metadata.Nz);
+                    _logger.LogInformation("Dataset job observed cancellation {JobId}", spec.JobId);
+                    return;
                 }
-                SetStatus(spec.JobId, "completed", "Completed", steps, steps, caseDir);
-                _logger.LogInformation("Dataset job completed {JobId}. report={ReportPath}", spec.JobId, reportPath);
             }
-            finally
+
+            if (File.Exists(outputPath))
             {
-                foreach (var d in Enumerable.Reverse(disposables))
-                {
-                    d.Dispose();
-                }
+                File.Delete(outputPath);
             }
+            File.Move(tempPath, outputPath);
+
+            SetStatus(spec.JobId, "completed", "Completed", steps, steps, outputPath);
+            _logger.LogInformation("Dataset job completed {JobId}. file={OutputPath}", spec.JobId, outputPath);
         }
         catch (Exception ex)
         {
-            SetStatus(spec.JobId, "failed", ex.Message, 0, spec.TotalSteps, spec.OutputDir);
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+
+            SetStatus(spec.JobId, "failed", ex.Message, 0, spec.TotalSteps, outputPath);
             _logger.LogError(ex, "Dataset job failed {JobId}", spec.JobId);
         }
     }
 
-    private static void SaveFieldCsv(string path, double[] arr, int nx, int nz)
+    private static void ExportFields(SimulationRuntime runtime, double[] pressure, double[] saturationFractures, double[] saturationBlocks)
     {
-        using var w = new StreamWriter(path, false, System.Text.Encoding.UTF8);
-        int idx = 0;
-        for (int kz = 0; kz < nz; kz++)
+        runtime.GetFieldTo(DatasetFields[0], pressure);
+        runtime.GetFieldTo(DatasetFields[1], saturationFractures);
+        runtime.GetFieldTo(DatasetFields[2], saturationBlocks);
+    }
+
+    private static void ValidateDatasetConfig(SimulationConfig config)
+    {
+        if (config.NB != 5 || config.Layers.Length != 5)
         {
-            for (int ix = 0; ix < nx; ix++)
-            {
-                if (ix > 0) w.Write(',');
-                w.Write(arr[idx++].ToString("R", CultureInfo.InvariantCulture));
-            }
-            w.WriteLine();
+            throw new InvalidOperationException("SR-датасет поддерживает только конфигурации с ровно 5 слоями.");
         }
     }
 
-    private static void WriteMeta(string caseDir, SimulationRuntimeMetadata metadata, int steps, int nz)
+    private static SimulationConfig BuildHrConfig(SimulationConfig lrConfig)
     {
-        var obj = new
-        {
-            steps,
-            nx = metadata.Nx,
-            nz,
-            tu = metadata.TimeStepDays,
-            spatial_fields = SpatialFieldNames,
-            scalar_series = ScalarSeriesNames,
-            static_params = new
+        SimulationConfig hrConfig = lrConfig.Clone();
+        hrConfig.NX = checked(lrConfig.NX * ScaleFactor);
+        hrConfig.Layers = hrConfig.Layers
+            .Select(layer =>
             {
-                N_Dr = metadata.DrainageSubsteps,
-                EPSP = metadata.PressureTolerance,
-                TK = metadata.TkDays,
-                Bt_Cp = metadata.BtCp,
-                Bt_Tr = metadata.BtTr,
-                Q_zab = metadata.ConfiguredQZab,
-                metadata.P32,
-                MU_pazp = metadata.MuPazp
-            }
-        };
-        File.WriteAllText(Path.Combine(caseDir, "meta.json"), JsonSerializer.Serialize(obj));
+                LayerConfig scaled = layer.Clone();
+                scaled.NZM = checked(layer.NZM * ScaleFactor);
+                return scaled;
+            })
+            .ToArray();
+        return hrConfig;
     }
 
     private bool IsCancelled(string jobId)
@@ -250,9 +192,9 @@ public sealed class DatasetJobManager
         return _jobs.TryGetValue(jobId, out var status) && status.State == "cancelled";
     }
 
-    private void SetStatus(string jobId, string state, string message, int done, int total, string outputDir)
+    private void SetStatus(string jobId, string state, string message, int done, int total, string outputPath)
     {
-        _jobs[jobId] = new DatasetJobStatus(jobId, state, message, done, total, outputDir);
+        _jobs[jobId] = new DatasetJobStatus(jobId, state, message, done, total, outputPath);
     }
 }
 
@@ -260,8 +202,7 @@ public sealed record RunDatasetSpec(
     string JobId,
     string OutputDir,
     Simulation.Core.SimulationConfig Config,
-    int TotalSteps,
-    bool CaptureEveryStep
+    int TotalSteps
 );
 
 public sealed record DatasetJobStatus(
@@ -270,5 +211,5 @@ public sealed record DatasetJobStatus(
     string Message,
     int StepsDone,
     int StepsTotal,
-    string OutputDir
+    string OutputPath
 );

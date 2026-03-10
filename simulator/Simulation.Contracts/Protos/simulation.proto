@@ -160,10 +160,8 @@ message SimulationConfig {
 message RunDatasetJobRequest {
   string job_id = 1;
   string output_dir = 2;
-  int32 trajectory_steps = 3;
-  int32 max_steps = 4;
-  bool capture_every_step = 5;
-  SimulationConfig config = 6;
+  int32 steps = 3;
+  SimulationConfig config = 4;
 }
 
 message RunDatasetJobResponse {
@@ -182,7 +180,7 @@ message GetJobStatusResponse {
   string message = 3;
   int32 steps_done = 4;
   int32 steps_total = 5;
-  string output_dir = 6;
+  string output_path = 6;
 }
 
 message CancelJobRequest {
