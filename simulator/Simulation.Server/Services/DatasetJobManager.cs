@@ -9,6 +9,7 @@ public sealed class DatasetJobManager
     private static readonly string[] DatasetFields = ["P", "ST", "SB"];
 
     private readonly ConcurrentDictionary<string, DatasetJobStatus> _jobs = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _pauseGates = new(StringComparer.Ordinal);
     private readonly ILogger<DatasetJobManager> _logger;
 
     public DatasetJobManager(ILogger<DatasetJobManager> logger)
@@ -24,6 +25,8 @@ public sealed class DatasetJobManager
         {
             throw new InvalidOperationException($"Job '{jobId}' already exists.");
         }
+
+        _pauseGates[jobId] = new SemaphoreSlim(1, 1);
 
         _logger.LogInformation("Queue dataset job {JobId} output={OutputDir} steps={TotalSteps}", jobId, spec.OutputDir, spec.TotalSteps);
         _ = Task.Run(() => RunJobAsync(spec with { JobId = jobId }));
@@ -43,13 +46,65 @@ public sealed class DatasetJobManager
         }
 
         _jobs[jobId] = status with { State = "cancelled", Message = "Cancelled by user." };
+        ReleaseGate(jobId);
         _logger.LogInformation("Dataset job cancelled {JobId}", jobId);
+        return true;
+    }
+
+    public bool Pause(string jobId)
+    {
+        if (!_jobs.TryGetValue(jobId, out var status))
+        {
+            return false;
+        }
+
+        if (status.State != "running")
+        {
+            return false;
+        }
+
+        if (!_pauseGates.TryGetValue(jobId, out var gate))
+        {
+            return false;
+        }
+
+        gate.Wait();
+        _jobs[jobId] = status with { State = "paused", Message = "Paused by user." };
+        _logger.LogInformation("Dataset job paused {JobId}", jobId);
+        return true;
+    }
+
+    public bool Resume(string jobId)
+    {
+        if (!_jobs.TryGetValue(jobId, out var status))
+        {
+            return false;
+        }
+
+        if (status.State != "paused")
+        {
+            return false;
+        }
+
+        _jobs[jobId] = status with { State = "running", Message = "Resumed." };
+
+        if (_pauseGates.TryGetValue(jobId, out var gate))
+        {
+            gate.Release();
+        }
+
+        _logger.LogInformation("Dataset job resumed {JobId}", jobId);
         return true;
     }
 
     public bool Remove(string jobId)
     {
-        return _jobs.TryRemove(jobId, out _);
+        bool removed = _jobs.TryRemove(jobId, out _);
+        if (_pauseGates.TryRemove(jobId, out var gate))
+        {
+            gate.Dispose();
+        }
+        return removed;
     }
 
     private async Task RunJobAsync(RunDatasetSpec spec)
@@ -100,6 +155,7 @@ public sealed class DatasetJobManager
 
                     for (int step = 0; step < steps; step++)
                     {
+                        await WaitIfPausedAsync(spec.JobId);
                         if (IsCancelled(spec.JobId))
                         {
                             return;
@@ -114,7 +170,7 @@ public sealed class DatasetJobManager
                         }
                         int done = Interlocked.Exchange(ref lrDone, step + 1);
                         _ = done;
-                        SetStatus(spec.JobId, "running", "Running", Math.Min(lrDone, hrDone), steps, outputPath);
+                        UpdateProgress(spec.JobId, Math.Min(lrDone, hrDone), steps, outputPath);
                         await Task.Yield();
                     }
                 });
@@ -127,6 +183,7 @@ public sealed class DatasetJobManager
 
                     for (int step = 0; step < steps; step++)
                     {
+                        await WaitIfPausedAsync(spec.JobId);
                         if (IsCancelled(spec.JobId))
                         {
                             return;
@@ -140,7 +197,7 @@ public sealed class DatasetJobManager
                         }
                         int done = Interlocked.Exchange(ref hrDone, step + 1);
                         _ = done;
-                        SetStatus(spec.JobId, "running", "Running", Math.Min(lrDone, hrDone), steps, outputPath);
+                        UpdateProgress(spec.JobId, Math.Min(lrDone, hrDone), steps, outputPath);
                         await Task.Yield();
                     }
                 });
@@ -173,6 +230,24 @@ public sealed class DatasetJobManager
             SetStatus(spec.JobId, "failed", ex.Message, 0, spec.TotalSteps, outputPath);
             _logger.LogError(ex, "Dataset job failed {JobId}", spec.JobId);
         }
+        finally
+        {
+            if (_pauseGates.TryRemove(spec.JobId, out var gate))
+            {
+                gate.Dispose();
+            }
+        }
+    }
+
+    private async Task WaitIfPausedAsync(string jobId)
+    {
+        if (!_pauseGates.TryGetValue(jobId, out var gate))
+        {
+            return;
+        }
+
+        await gate.WaitAsync();
+        gate.Release();
     }
 
     private static void ExportFields(SimulationRuntime runtime, double[] pressure, double[] saturationFractures, double[] saturationBlocks)
@@ -213,6 +288,23 @@ public sealed class DatasetJobManager
     private void SetStatus(string jobId, string state, string message, int done, int total, string outputPath)
     {
         _jobs[jobId] = new DatasetJobStatus(jobId, state, message, done, total, outputPath);
+    }
+
+    private void UpdateProgress(string jobId, int done, int total, string outputPath)
+    {
+        _jobs.AddOrUpdate(jobId,
+            _ => new DatasetJobStatus(jobId, "running", "Running", done, total, outputPath),
+            (_, existing) => existing.State is "paused" or "cancelled"
+                ? existing with { StepsDone = done, StepsTotal = total }
+                : existing with { State = "running", Message = "Running", StepsDone = done, StepsTotal = total, OutputPath = outputPath });
+    }
+
+    private void ReleaseGate(string jobId)
+    {
+        if (_pauseGates.TryGetValue(jobId, out var gate) && gate.CurrentCount == 0)
+        {
+            gate.Release();
+        }
     }
 }
 

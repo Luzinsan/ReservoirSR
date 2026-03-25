@@ -64,6 +64,16 @@ class SimulationServiceStub(object):
                 request_serializer=simulation__pb2.CancelJobRequest.SerializeToString,
                 response_deserializer=simulation__pb2.CancelJobResponse.FromString,
                 _registered_method=True)
+        self.PauseJob = channel.unary_unary(
+                '/simulation.SimulationService/PauseJob',
+                request_serializer=simulation__pb2.PauseJobRequest.SerializeToString,
+                response_deserializer=simulation__pb2.PauseJobResponse.FromString,
+                _registered_method=True)
+        self.ResumeJob = channel.unary_unary(
+                '/simulation.SimulationService/ResumeJob',
+                request_serializer=simulation__pb2.ResumeJobRequest.SerializeToString,
+                response_deserializer=simulation__pb2.ResumeJobResponse.FromString,
+                _registered_method=True)
 
 
 class SimulationServiceServicer(object):
@@ -105,6 +115,18 @@ class SimulationServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PauseJob(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResumeJob(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_SimulationServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -137,6 +159,16 @@ def add_SimulationServiceServicer_to_server(servicer, server):
                     servicer.CancelJob,
                     request_deserializer=simulation__pb2.CancelJobRequest.FromString,
                     response_serializer=simulation__pb2.CancelJobResponse.SerializeToString,
+            ),
+            'PauseJob': grpc.unary_unary_rpc_method_handler(
+                    servicer.PauseJob,
+                    request_deserializer=simulation__pb2.PauseJobRequest.FromString,
+                    response_serializer=simulation__pb2.PauseJobResponse.SerializeToString,
+            ),
+            'ResumeJob': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResumeJob,
+                    request_deserializer=simulation__pb2.ResumeJobRequest.FromString,
+                    response_serializer=simulation__pb2.ResumeJobResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -301,6 +333,60 @@ class SimulationService(object):
             '/simulation.SimulationService/CancelJob',
             simulation__pb2.CancelJobRequest.SerializeToString,
             simulation__pb2.CancelJobResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PauseJob(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/simulation.SimulationService/PauseJob',
+            simulation__pb2.PauseJobRequest.SerializeToString,
+            simulation__pb2.PauseJobResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumeJob(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/simulation.SimulationService/ResumeJob',
+            simulation__pb2.ResumeJobRequest.SerializeToString,
+            simulation__pb2.ResumeJobResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -218,4 +218,26 @@ public sealed class SimulationGrpcService(
             Message = ok ? "Cancelled." : "Job not found."
         });
     }
+
+    public override Task<PauseJobResponse> PauseJob(PauseJobRequest request, ServerCallContext context)
+    {
+        bool ok = jobManager.Pause(request.JobId);
+        logger.LogInformation("Pause job {JobId}: {Result}", request.JobId, ok ? "ok" : "failed");
+        return Task.FromResult(new PauseJobResponse
+        {
+            Ok = ok,
+            Message = ok ? "Paused." : "Job not found or not running."
+        });
+    }
+
+    public override Task<ResumeJobResponse> ResumeJob(ResumeJobRequest request, ServerCallContext context)
+    {
+        bool ok = jobManager.Resume(request.JobId);
+        logger.LogInformation("Resume job {JobId}: {Result}", request.JobId, ok ? "ok" : "failed");
+        return Task.FromResult(new ResumeJobResponse
+        {
+            Ok = ok,
+            Message = ok ? "Resumed." : "Job not found or not paused."
+        });
+    }
 }

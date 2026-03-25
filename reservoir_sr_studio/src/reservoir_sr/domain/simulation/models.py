@@ -52,6 +52,7 @@ class SimulationFields:
 class DatasetJobState(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
+    PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -77,5 +78,17 @@ class DatasetJobStatus:
 
 @dataclass(frozen=True)
 class DatasetJobCancellation:
+    ok: bool
+    message: str
+
+
+@dataclass(frozen=True)
+class DatasetJobPause:
+    ok: bool
+    message: str
+
+
+@dataclass(frozen=True)
+class DatasetJobResume:
     ok: bool
     message: str

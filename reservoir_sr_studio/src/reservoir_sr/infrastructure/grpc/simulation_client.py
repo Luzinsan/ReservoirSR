@@ -10,6 +10,8 @@ from reservoir_sr.domain.simulation.config_models import ReservoirLayerConfig, S
 from reservoir_sr.domain.simulation.models import (
     DatasetJobCancellation,
     DatasetJobHandle,
+    DatasetJobPause,
+    DatasetJobResume,
     DatasetJobState,
     DatasetJobStatus,
     FieldGrid,
@@ -31,6 +33,10 @@ class SimulationStubProtocol(Protocol):
     def GetJobStatus(self, request: object) -> object: ...
 
     def CancelJob(self, request: object) -> object: ...
+
+    def PauseJob(self, request: object) -> object: ...
+
+    def ResumeJob(self, request: object) -> object: ...
 
 
 class SimulationServiceError(RuntimeError):
@@ -155,6 +161,14 @@ class GrpcSimulationClient:
     def cancel_job(self, job_id: str) -> DatasetJobCancellation:
         response = self._stub.CancelJob(self._simulation_pb2.CancelJobRequest(job_id=job_id))
         return DatasetJobCancellation(ok=response.ok, message=response.message)
+
+    def pause_job(self, job_id: str) -> DatasetJobPause:
+        response = self._stub.PauseJob(self._simulation_pb2.PauseJobRequest(job_id=job_id))
+        return DatasetJobPause(ok=response.ok, message=response.message)
+
+    def resume_job(self, job_id: str) -> DatasetJobResume:
+        response = self._stub.ResumeJob(self._simulation_pb2.ResumeJobRequest(job_id=job_id))
+        return DatasetJobResume(ok=response.ok, message=response.message)
 
     def close(self) -> None:
         self._channel.close()
