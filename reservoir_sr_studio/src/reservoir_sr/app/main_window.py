@@ -1,187 +1,176 @@
 from __future__ import annotations
 
 import sys
-import uuid
-from dataclasses import asdict
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from reservoir_sr.app.modules.data_module_methods import DataModuleMethods
-from reservoir_sr.domain.simulation.config_models import SimulationConfig
-from reservoir_sr.features.inference.presentation.inference_panel import InferencePanel
-from reservoir_sr.features.simulation.application.config_persistence_service import ConfigPersistenceService
-from reservoir_sr.features.simulation.application.dataset_generation_service import DatasetGenerationService
-from reservoir_sr.features.simulation.application.dataset_view_service import DatasetViewService
-from reservoir_sr.features.simulation.application.runtime_service import RuntimeService
-from reservoir_sr.features.simulation.presentation.config_panel import ConfigPanel
-from reservoir_sr.features.simulation.presentation.data_sources_panel import DataSourcesPanel
-from reservoir_sr.features.simulation.presentation.maps_panel import MapsPanel
-from reservoir_sr.features.simulation.presentation.metrics_panel import MetricsPanel
-from reservoir_sr.features.simulation.presentation.playback_panel import PlaybackPanel
-from reservoir_sr.features.simulation.presentation.plot_controller import PlotController
-from reservoir_sr.features.simulation.presentation.state import (
-    DatasetJobViewState,
-    DatasetViewState,
-    MetricsState,
-    RenderViewState,
-    RuntimeTrackingState,
-    RuntimeViewState,
-    ViewMode,
-)
-from reservoir_sr.features.training.presentation.training_panel import TrainingPanel
-from reservoir_sr.infrastructure.grpc.simulation_client import GrpcSimulationClient
+from reservoir_sr.app.app_context import AppContext, AppModuleTab
+from reservoir_sr.app.module_protocol import ModuleProtocol
+from reservoir_sr.app.settings_dialog import SettingsDialog
+from reservoir_sr.common.logging import EventLogger
+from reservoir_sr.features.inference.presentation.inference_module import InferenceModule
+from reservoir_sr.features.simulation.presentation.controllers.data_tab_controller import DataTabController
+from reservoir_sr.features.simulation.presentation.panels.data_tab_panel import DataTabPanel
+from reservoir_sr.features.training.presentation.training_module import TrainingModule
 
 
-class MainWindow(DataModuleMethods, QtWidgets.QMainWindow):
-    def __init__(self, endpoint: str = "localhost:5000") -> None:
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self) -> None:
         super().__init__()
-        self.runtime_state = RuntimeViewState(endpoint=endpoint, simulation_id=f"sim_{uuid.uuid4().hex[:8]}")
-        self.dataset_job_state = DatasetJobViewState()
-        self.dataset_view_state = DatasetViewState()
-        self.render_state = RenderViewState()
-        self.metrics_state = MetricsState()
-        self.tracking_state = RuntimeTrackingState()
-        self.view_mode = ViewMode.RUNTIME
-        self.defaults = SimulationConfig()
-        self.config_keys = set(asdict(self.defaults).keys())
-        self.runtime_state.payload = asdict(self.defaults)
-
-        self.client = GrpcSimulationClient(endpoint)
-        self.runtime_service = RuntimeService(self.client)
-        self.generation_service = DatasetGenerationService(endpoint)
-        self.view_service = DatasetViewService()
-        self.config_service = ConfigPersistenceService()
-        self.plot_controller = PlotController()
-
-        self.runtime_timer = QtCore.QTimer(self)
-        self.runtime_timer.timeout.connect(self.on_timer_tick)
-        self.dataset_timer = QtCore.QTimer(self)
-        self.dataset_timer.timeout.connect(self._poll_dataset_status)
-
-        self.layer_lines: list[object] = []
-        self.layer_labels: list[object] = []
-        self.isoline_items: list[object] = []
-        self.vector_items: list[object] = []
-
-        self._build_ui(endpoint)
-        self._init_simulation()
-
-    def closeEvent(self, event) -> None:  # type: ignore[override]
-        self.runtime_timer.stop()
-        self.dataset_timer.stop()
-        self.client.close()
-        super().closeEvent(event)
-
-    def _build_ui(self, endpoint: str) -> None:
-        self.setWindowTitle("Фильтрация в трещиновато-пористом пласте (Python)")
+        self.setWindowTitle("Reservoir SR Studio")
+        self.context = AppContext()
         self.resize(1500, 950)
 
-        toolbar = self.addToolBar("Main")
-        self.act_start = QtGui.QAction("Тест", self)
-        self.act_metrics = QtGui.QAction("Характеристики", self)
-        self.act_settings = QtGui.QAction("Настройки", self)
-        self.act_start.triggered.connect(self.on_start)
-        toolbar.addAction(self.act_start)
-        toolbar.addAction(self.act_metrics)
-        toolbar.addAction(self.act_settings)
+        self._modules: list[ModuleProtocol] = []
 
+        self._build_toolbar()
+        self._build_log_panel()
+        self.logger = EventLogger("MainWindow", self.context.general, self.context.log_bus)
+        self._build_modules()
+        self._build_status_bar()
+        self._connect_signals()
+
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
+
+    def _build_toolbar(self) -> None:
+        toolbar = self.addToolBar("Main")
+        toolbar.setMovable(False)
+
+        self.act_open_project = QtGui.QAction("Open Project", self)
+        self.act_save_project = QtGui.QAction("Save Project", self)
+        self.act_settings = QtGui.QAction("Settings", self)
+        self.act_export = QtGui.QAction("Export", self)
+        self.act_reset = QtGui.QAction("Reset", self)
+        self.act_toggle_log = QtGui.QAction("Log", self)
+        self.act_toggle_log.setCheckable(True)
+
+        toolbar.addAction(self.act_open_project)
+        toolbar.addAction(self.act_save_project)
+        toolbar.addSeparator()
+        toolbar.addAction(self.act_settings)
+        toolbar.addSeparator()
+        toolbar.addAction(self.act_export)
+        toolbar.addAction(self.act_reset)
+        toolbar.addSeparator()
+        toolbar.addAction(self.act_toggle_log)
+
+    def _build_modules(self) -> None:
         self.module_tabs = QtWidgets.QTabWidget()
         self.setCentralWidget(self.module_tabs)
-        data_module = QtWidgets.QWidget()
-        self.module_tabs.addTab(data_module, "Data")
-        self.training_panel = TrainingPanel()
-        self.module_tabs.addTab(self.training_panel, "Training")
-        self.inference_panel = InferencePanel()
-        self.module_tabs.addTab(self.inference_panel, "Inference")
 
-        root_layout = QtWidgets.QHBoxLayout(data_module)
-        left = QtWidgets.QWidget()
-        left_layout = QtWidgets.QVBoxLayout(left)
-        left.setMinimumWidth(320)
-        left.setMaximumWidth(420)
-        root_layout.addWidget(left, stretch=0)
+        self.data_tab_panel = DataTabPanel()
+        self.data_tab_controller = DataTabController(context=self.context, panel=self.data_tab_panel)
+        self._add_module(self.data_tab_controller, "Data")
 
-        self.config_panel = ConfigPanel()
-        left_layout.addWidget(self.config_panel)
+        self._add_module(TrainingModule(context=self.context), "Training")
+        self._add_module(InferenceModule(context=self.context), "Inference")
 
-        self.data_sources_panel = DataSourcesPanel()
-        self.runtime_panel = self.data_sources_panel.runtime_panel
-        self.dataset_generation_panel = self.data_sources_panel.dataset_generation_panel
-        self.dataset_view_panel = self.data_sources_panel.dataset_view_panel
-        self.runtime_panel.endpoint_edit.setText(endpoint)
-        self.runtime_panel.simulation_id_edit.setText(self.runtime_state.simulation_id)
-        self.runtime_panel.nx_spin.setValue(self.defaults.nx)
-        self.runtime_panel.n_dr_spin.setValue(self.defaults.n_dr)
-        self.runtime_panel.epsp_spin.setValue(self.defaults.epsp)
-        self.runtime_panel.tu_spin.setValue(self.defaults.tu_seconds)
-        self.runtime_panel.tk_spin.setValue(self.defaults.tk_days)
-        left_layout.addWidget(self.data_sources_panel)
+    def _add_module(self, module: ModuleProtocol, label: str) -> None:
+        self._modules.append(module)
+        self.module_tabs.addTab(module.widget, label)
 
-        self.playback_panel = PlaybackPanel()
-        left_layout.addWidget(self.playback_panel)
-        left_layout.addStretch(1)
+    def _build_log_panel(self) -> None:
+        self.log_dock = QtWidgets.QDockWidget("Log", self)
+        self.log_dock.setAllowedAreas(
+            QtCore.Qt.DockWidgetArea.BottomDockWidgetArea
+            | QtCore.Qt.DockWidgetArea.TopDockWidgetArea
+        )
+        self.log_output = QtWidgets.QPlainTextEdit()
+        self.log_output.setReadOnly(True)
+        self.log_output.setMaximumBlockCount(5000)
+        self.log_dock.setWidget(self.log_output)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, self.log_dock)
+        self.log_dock.hide()
 
-        self.tabs = QtWidgets.QTabWidget()
-        root_layout.addWidget(self.tabs, stretch=1)
-        self.maps_panel = MapsPanel()
-        self.metrics_panel = MetricsPanel()
-        self.tabs.addTab(self.maps_panel, "Карты")
-        self.tabs.addTab(self.metrics_panel, "Характеристики")
+    def _build_status_bar(self) -> None:
+        self.status_label = QtWidgets.QLabel("Ready")
+        self.server_indicator = QtWidgets.QLabel(f"Server: {self.context.general.endpoint}")
+        self.statusBar().addWidget(self.status_label, 1)
+        self.statusBar().addPermanentWidget(self.server_indicator)
 
-        self.status_runtime = QtWidgets.QLabel("t=0.0  Q=0.0  Pz=0.0  H2O=0.0%")
-        self.statusBar().addWidget(self.status_runtime, 1)
-
-        self.act_metrics.triggered.connect(lambda: self.tabs.setCurrentIndex(1))
-        self.act_settings.triggered.connect(lambda: self.tabs.setCurrentIndex(0))
+    def _connect_signals(self) -> None:
+        self.context.nav.subscribe(self._on_nav_state_changed)
+        self.context.general.subscribe(self._on_general_settings_changed)
+        self.context.log_bus.message_logged.connect(self._append_log)
+        self.act_open_project.triggered.connect(self._on_open_project)
+        self.act_save_project.triggered.connect(self._on_save_project)
+        self.act_settings.triggered.connect(self._on_settings)
+        self.act_export.triggered.connect(self._on_export)
+        self.act_reset.triggered.connect(self._on_reset)
+        self.act_toggle_log.toggled.connect(self._on_toggle_log)
         self.module_tabs.currentChanged.connect(self._on_module_tab_changed)
-        self.playback_panel.start_button.clicked.connect(self.on_start)
-        self.playback_panel.pause_button.clicked.connect(self.on_pause)
-        self.playback_panel.step_button.clicked.connect(self.on_step)
-        self.playback_panel.reset_button.clicked.connect(self.on_reset)
-        self.playback_panel.apply_runtime_button.clicked.connect(self._init_simulation)
-        self.config_panel.browse_button.clicked.connect(self.on_browse_cfg)
-        self.config_panel.load_button.clicked.connect(self.on_load_cfg)
-        self.config_panel.save_button.clicked.connect(self.on_save_cfg)
-        self.dataset_generation_panel.browse_button.clicked.connect(self.on_browse_dataset_out)
-        self.dataset_view_panel.browse_button.clicked.connect(self.on_browse_dataset_file)
-        self.dataset_view_panel.load_button.clicked.connect(self.on_load_dataset_file)
-        self.dataset_generation_panel.start_button.clicked.connect(self.on_dataset_start)
-        self.dataset_generation_panel.cancel_button.clicked.connect(self.on_dataset_cancel)
-        self.data_sources_panel.mode_tabs.currentChanged.connect(self.on_mode_tab_changed)
-        self.dataset_view_panel.resolution_combo.currentIndexChanged.connect(self.on_dataset_resolution_changed)
-        self.dataset_view_panel.step_slider.valueChanged.connect(self.on_dataset_slider_changed)
-        self.maps_panel.render_mode_combo.currentIndexChanged.connect(self.on_render_mode_changed)
-        self.maps_panel.isoline_combo.currentIndexChanged.connect(self.on_isoline_layer_changed)
-        self.maps_panel.palette_combo.currentIndexChanged.connect(self.on_palette_changed)
-        self.maps_panel.show_legend_checkbox.toggled.connect(self.on_toggle_legend)
-        self.maps_panel.live_render_checkbox.toggled.connect(self.on_toggle_live_render)
-        self.maps_panel.zoom_checkbox.toggled.connect(self.on_toggle_zoom)
-        self.maps_panel.zoom_reset_button.clicked.connect(self.on_zoom_reset)
-        self.maps_panel.isoline_width_spin.valueChanged.connect(self.on_isoline_width_changed)
-        self.maps_panel.isoline_stride_spin.valueChanged.connect(self.on_isoline_stride_changed)
-        self.maps_panel.vector_color_button.clicked.connect(self.on_pick_vector_color)
 
-        for label, button in self.maps_panel.field_buttons.items():
-            field = self.maps_panel.field_button_map[label]
-            button.clicked.connect(lambda checked=False, f=field: self.on_select_field(f))
+    # ------------------------------------------------------------------
+    # Toolbar handlers
+    # ------------------------------------------------------------------
 
-        self._sync_field_buttons()
-        self._update_mode_controls()
+    def _on_open_project(self) -> None:
+        """TODO: диалог выбора файла проекта, вызов apply_project на всех модулях."""
+        self.logger.action("Open project requested")
+        self.logger.warning("Open Project not implemented")
 
-    def _is_data_module_active(self) -> bool:
-        return self.module_tabs.currentIndex() == 0
+    def _on_save_project(self) -> None:
+        """TODO: сбор collect_project со всех модулей, запись в JSON."""
+        self.logger.action("Save project requested")
+        self.logger.warning("Save Project not implemented")
 
-    def _on_module_tab_changed(self, _: int) -> None:
-        if not self._is_data_module_active() and self.runtime_timer.isActive():
-            self.on_pause()
-        self._update_mode_controls()
+    def _on_settings(self) -> None:
+        self.logger.action("Settings dialog opened")
+        dialog = SettingsDialog(self.context, self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            self.logger.info("Settings updated")
+            self.statusBar().showMessage("Settings updated", 3000)
+        else:
+            self.logger.action("Settings dialog cancelled")
+
+    def _on_general_settings_changed(self, name: str, value: object) -> None:
+        if name == "endpoint":
+            self.server_indicator.setText(f"Server: {value}")
+            self.logger.info("General setting changed", name=name, value=value)
+
+    def _on_nav_state_changed(self, name: str, value: object) -> None:
+        if name == "status_text":
+            self.status_label.setText(str(value))
+
+    def _on_export(self) -> None:
+        self.logger.action("Toolbar export triggered")
+        self._current_module().export_data()
+
+    def _on_reset(self) -> None:
+        self.logger.action("Toolbar reset triggered")
+        self._current_module().reset_module()
+
+    def _on_toggle_log(self, visible: bool) -> None:
+        self.log_dock.setVisible(visible)
+        self.logger.action("Log panel toggled", visible=visible)
+
+    def _on_module_tab_changed(self, index: int) -> None:
+        self.context.nav.current_module = AppModuleTab(index)
+        self.logger.info("Module tab changed", index=index)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _current_module(self) -> ModuleProtocol:
+        index = self.module_tabs.currentIndex()
+        return self._modules[index]
+
+    def _append_log(self, message: str) -> None:
+        self.log_output.appendPlainText(message)
+
+    # ------------------------------------------------------------------
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        for module in self._modules:
+            module.close_resources()
+        super().closeEvent(event)
 
 
 def main() -> None:
-    endpoint = "localhost:5000"
-    if len(sys.argv) > 1:
-        endpoint = sys.argv[1]
     app = QtWidgets.QApplication(sys.argv)
-    window = MainWindow(endpoint=endpoint)
+    window = MainWindow()
     window.show()
     sys.exit(app.exec())
