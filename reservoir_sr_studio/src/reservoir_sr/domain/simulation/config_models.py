@@ -98,10 +98,10 @@ def build_simulation_config(**overrides: Any) -> SimulationConfig:
 
 
 def simulation_config_from_mapping(payload: Mapping[str, Any]) -> SimulationConfig:
-    layers = payload.get("layers")
-    resolved_payload = dict(payload)
-    if layers is not None:
-        resolved_payload["layers"] = [
-            layer if isinstance(layer, ReservoirLayerConfig) else ReservoirLayerConfig(**layer) for layer in layers
+    data = dict(payload)
+    if "layers" in data:
+        data["layers"] = [
+            l if isinstance(l, ReservoirLayerConfig) else ReservoirLayerConfig(**l)
+            for l in data["layers"]
         ]
-    return build_simulation_config(**resolved_payload)
+    return build_simulation_config(**data)

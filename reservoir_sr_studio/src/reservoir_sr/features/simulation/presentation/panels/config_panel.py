@@ -12,9 +12,10 @@ class ConfigPanel(QtWidgets.QGroupBox):
 
         path_layout = QtWidgets.QHBoxLayout()
         self.path_edit = QtWidgets.QLineEdit(str(Path.cwd() / "gui_config.json"))
-        self.browse_button = QtWidgets.QPushButton("...")
+        browse_button = QtWidgets.QPushButton("...")
+        browse_button.clicked.connect(self._on_browse)
         path_layout.addWidget(self.path_edit)
-        path_layout.addWidget(self.browse_button)
+        path_layout.addWidget(browse_button)
 
         buttons_layout = QtWidgets.QHBoxLayout()
         self.load_button = QtWidgets.QPushButton("Load")
@@ -24,3 +25,10 @@ class ConfigPanel(QtWidgets.QGroupBox):
 
         layout.addLayout(path_layout)
         layout.addLayout(buttons_layout)
+
+    def _on_browse(self) -> None:
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Select config", self.path_edit.text(), "JSON (*.json)",
+        )
+        if file_path:
+            self.path_edit.setText(file_path)

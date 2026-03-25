@@ -5,7 +5,7 @@ import pyqtgraph as pg
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
-class PlotController:
+class FieldPlotRenderer:
     def geographical_palette(self, pal_size: int = 21) -> np.ndarray:
         colors = np.zeros((pal_size, 3), dtype=np.uint8)
         third = pal_size // 3
@@ -201,64 +201,41 @@ class PlotController:
             existing_items.append(iso)
         return existing_items
 
-    def update_map_overlays(
+    def update_scene_layout(
         self,
         plot: pg.PlotWidget,
         *,
         scene_dims: tuple[float, float],
-        vector_color: QtGui.QColor,
+        layer_boundaries: np.ndarray | None,
         layer_lines: list[pg.InfiniteLine],
         layer_labels: list[pg.TextItem],
-        vector_items: list[pg.ArrowItem],
-    ) -> tuple[list[pg.InfiniteLine], list[pg.TextItem], list[pg.ArrowItem]]:
+    ) -> tuple[list[pg.InfiniteLine], list[pg.TextItem]]:
+        """Обновляет viewport камеры и оверлеи слоёв при смене scene_dims."""
         for line in layer_lines:
             plot.removeItem(line)
         for label in layer_labels:
             plot.removeItem(label)
-        for vector in vector_items:
-            plot.removeItem(vector)
+
+        scene_nx, scene_nz = scene_dims
+        plot.getViewBox().setRange(rect=QtCore.QRectF(0.0, 0.0, scene_nx, scene_nz), padding=0.02)
 
         layer_lines = []
         layer_labels = []
-        vector_items = []
-        scene_nx, scene_nz = scene_dims
-        layer_height = scene_nz / 5.0
-        for idx in range(1, 5):
-            y = float(idx) * layer_height
-            line = pg.InfiniteLine(pos=y, angle=0, pen=pg.mkPen((20, 20, 20), width=1))
+        if layer_boundaries is None or layer_boundaries.size == 0:
+            return layer_lines, layer_labels
+
+        full = np.concatenate(([0.0], layer_boundaries, [scene_nz]))
+        for y in layer_boundaries:
+            line = pg.InfiniteLine(pos=float(y), angle=0, pen=pg.mkPen((20, 20, 20), width=1))
             plot.addItem(line)
             layer_lines.append(line)
-        for idx in range(5):
-            y_mid = (float(idx) + 0.5) * layer_height
+        for idx in range(len(full) - 1):
+            y_mid = float((full[idx] + full[idx + 1]) / 2.0)
             label = pg.TextItem(text=f"h{idx + 1}", color=(0, 0, 0), anchor=(0, 0.5))
             label.setPos(scene_nx + 0.5, y_mid)
             plot.addItem(label)
             layer_labels.append(label)
-            left_arrow = pg.ArrowItem(
-                pos=(0.3, y_mid),
-                angle=180,
-                brush=pg.mkBrush(vector_color),
-                pen=pg.mkPen(vector_color),
-            )
-            right_arrow = pg.ArrowItem(
-                pos=(scene_nx - 0.3, y_mid),
-                angle=0,
-                brush=pg.mkBrush(vector_color),
-                pen=pg.mkPen(vector_color),
-            )
-            plot.addItem(left_arrow)
-            plot.addItem(right_arrow)
-            vector_items.extend([left_arrow, right_arrow])
-        return layer_lines, layer_labels, vector_items
-
-    def fit_map_to_grid(
-        self,
-        plot: pg.PlotWidget,
-        *,
-        scene_dims: tuple[float, float],
-    ) -> None:
-        scene_nx, scene_nz = scene_dims
-        plot.getViewBox().setRange(rect=QtCore.QRectF(0.0, 0.0, scene_nx, scene_nz), padding=0.02)
+        return layer_lines, layer_labels
 
     def update_legend(self, label: QtWidgets.QLabel, *, palette_name: str) -> None:
         palette = self.active_palette(palette_name)

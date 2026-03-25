@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pyqtgraph as pg
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtWidgets
 
 
 class MapsPanel(QtWidgets.QWidget):
@@ -19,48 +19,6 @@ class MapsPanel(QtWidgets.QWidget):
         self.render_mode_combo.addItem("Сглаженная", "smooth")
         top_row.addWidget(self.render_mode_combo)
         layout.addLayout(top_row)
-
-        opts_row = QtWidgets.QHBoxLayout()
-        opts_row.addWidget(QtWidgets.QLabel("Палитра:"))
-        self.palette_combo = QtWidgets.QComboBox()
-        self.palette_combo.addItem("Географическая", "geographical")
-        self.palette_combo.addItem("Вода и нефть", "water_oil")
-        self.palette_combo.addItem("Грязь и вода", "mud_water")
-        self.palette_combo.addItem("Океан", "ocean")
-        self.palette_combo.addItem("Рассвет", "sunset")
-        self.palette_combo.addItem("Закат", "dawn")
-        self.palette_combo.addItem("Радуга", "rainbow")
-        opts_row.addWidget(self.palette_combo)
-        self.show_legend_checkbox = QtWidgets.QCheckBox("Легенда")
-        self.show_legend_checkbox.setChecked(True)
-        opts_row.addWidget(self.show_legend_checkbox)
-        self.live_render_checkbox = QtWidgets.QCheckBox("Рендер в прямом эфире")
-        self.live_render_checkbox.setChecked(True)
-        opts_row.addWidget(self.live_render_checkbox)
-        opts_row.addWidget(QtWidgets.QLabel("Изолинии:"))
-        self.isoline_combo = QtWidgets.QComboBox()
-        self.isoline_combo.addItem("Выкл", "off")
-        self.isoline_combo.addItem("Поверх карты", "overlay")
-        self.isoline_combo.addItem("Только изолинии", "only")
-        opts_row.addWidget(self.isoline_combo)
-        self.zoom_checkbox = QtWidgets.QCheckBox("Увеличение области")
-        opts_row.addWidget(self.zoom_checkbox)
-        self.zoom_reset_button = QtWidgets.QPushButton("Сброс зума")
-        opts_row.addWidget(self.zoom_reset_button)
-        opts_row.addWidget(QtWidgets.QLabel("Толщина изолиний"))
-        self.isoline_width_spin = QtWidgets.QSpinBox()
-        self.isoline_width_spin.setRange(1, 4)
-        self.isoline_width_spin.setValue(2)
-        opts_row.addWidget(self.isoline_width_spin)
-        opts_row.addWidget(QtWidgets.QLabel("Частота изолиний"))
-        self.isoline_stride_spin = QtWidgets.QSpinBox()
-        self.isoline_stride_spin.setRange(1, 12)
-        self.isoline_stride_spin.setValue(1)
-        opts_row.addWidget(self.isoline_stride_spin)
-        self.vector_color_button = QtWidgets.QPushButton("Цвет векторов")
-        opts_row.addWidget(self.vector_color_button)
-        opts_row.addStretch(1)
-        layout.addLayout(opts_row)
 
         body = QtWidgets.QHBoxLayout()
         layout.addLayout(body, stretch=1)
