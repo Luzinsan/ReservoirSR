@@ -162,6 +162,7 @@ message RunDatasetJobRequest {
   string output_dir = 2;
   int32 steps = 3;
   SimulationConfig config = 4;
+  int32 snapshot_stride = 5;
 }
 
 message RunDatasetJobResponse {

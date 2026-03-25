@@ -62,6 +62,8 @@ public sealed class DatasetJobManager
 
             ValidateDatasetConfig(spec.Config);
             SimulationConfig hrConfig = BuildHrConfig(spec.Config);
+            int snapshotStride = Math.Max(spec.SnapshotStride, 1);
+            int recordedSteps = (spec.TotalSteps + snapshotStride - 1) / snapshotStride;
 
             var lrRuntime = new SimulationRuntime();
             var hrRuntime = new SimulationRuntime();
@@ -75,7 +77,17 @@ public sealed class DatasetJobManager
             SetStatus(spec.JobId, "running", "Running", 0, steps, outputPath);
             _logger.LogInformation("Dataset job running {JobId} output={OutputPath}", spec.JobId, outputPath);
 
-            using (var writer = new SrSimulationArchiveWriter(tempPath, spec.JobId, steps, spec.Config, hrConfig, lrMetadata, hrMetadata))
+            using (
+                var writer = new SrSimulationArchiveWriter(
+                    tempPath,
+                    spec.JobId,
+                    recordedSteps,
+                    spec.Config,
+                    hrConfig,
+                    lrMetadata,
+                    hrMetadata
+                )
+            )
             {
                 int lrDone = 0;
                 int hrDone = 0;
@@ -94,9 +106,12 @@ public sealed class DatasetJobManager
                         }
 
                         SimulationStepResult result = lrRuntime.Step(1);
-                        ExportFields(lrRuntime, pressure, saturationFractures, saturationBlocks);
-                        writer.WriteLrStep(pressure, saturationFractures, saturationBlocks);
-                        writer.WriteDynamicStep(result);
+                        if (step % snapshotStride == 0)
+                        {
+                            ExportFields(lrRuntime, pressure, saturationFractures, saturationBlocks);
+                            writer.WriteLrStep(pressure, saturationFractures, saturationBlocks);
+                            writer.WriteDynamicStep(result);
+                        }
                         int done = Interlocked.Exchange(ref lrDone, step + 1);
                         _ = done;
                         SetStatus(spec.JobId, "running", "Running", Math.Min(lrDone, hrDone), steps, outputPath);
@@ -118,8 +133,11 @@ public sealed class DatasetJobManager
                         }
 
                         _ = hrRuntime.Step(1);
-                        ExportFields(hrRuntime, pressure, saturationFractures, saturationBlocks);
-                        writer.WriteHrStep(pressure, saturationFractures, saturationBlocks);
+                        if (step % snapshotStride == 0)
+                        {
+                            ExportFields(hrRuntime, pressure, saturationFractures, saturationBlocks);
+                            writer.WriteHrStep(pressure, saturationFractures, saturationBlocks);
+                        }
                         int done = Interlocked.Exchange(ref hrDone, step + 1);
                         _ = done;
                         SetStatus(spec.JobId, "running", "Running", Math.Min(lrDone, hrDone), steps, outputPath);
@@ -202,7 +220,8 @@ public sealed record RunDatasetSpec(
     string JobId,
     string OutputDir,
     Simulation.Core.SimulationConfig Config,
-    int TotalSteps
+    int TotalSteps,
+    int SnapshotStride
 );
 
 public sealed record DatasetJobStatus(

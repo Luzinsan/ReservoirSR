@@ -56,13 +56,14 @@ def _to_proto_config(simulation_pb2: object, config: SimulationConfig) -> object
 class GrpcSimulationClient:
     def __init__(
         self,
-        endpoint: str = "localhost:5000",
+        endpoint: str,
         *,
         channel_factory=grpc.insecure_channel,
         stub_class: type[SimulationStubProtocol] | None = None,
     ) -> None:
         simulation_pb2, simulation_pb2_grpc = _generated_modules()
         self._simulation_pb2 = simulation_pb2
+        self.endpoint = endpoint
         self._channel = channel_factory(endpoint)
         resolved_stub_class = stub_class or simulation_pb2_grpc.SimulationServiceStub
         self._stub = resolved_stub_class(self._channel)
@@ -121,13 +122,21 @@ class GrpcSimulationClient:
         }
         return SimulationFields(nx=response.nx, nz=response.nz, data=data)
 
-    def run_dataset_job(self, job_id: str, output_dir: str, steps: int, config: SimulationConfig) -> DatasetJobHandle:
+    def run_dataset_job(
+        self,
+        job_id: str,
+        output_dir: str,
+        steps: int,
+        config: SimulationConfig,
+        snapshot_stride: int = 1,
+    ) -> DatasetJobHandle:
         response = self._stub.RunDatasetJob(
             self._simulation_pb2.RunDatasetJobRequest(
                 job_id=job_id,
                 output_dir=output_dir,
                 steps=steps,
                 config=_to_proto_config(self._simulation_pb2, config),
+                snapshot_stride=snapshot_stride,
             )
         )
         return DatasetJobHandle(ok=response.ok, message=response.message, job_id=response.job_id)
