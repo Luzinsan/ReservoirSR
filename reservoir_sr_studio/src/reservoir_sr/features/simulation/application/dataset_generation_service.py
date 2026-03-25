@@ -21,7 +21,7 @@ class DatasetGenerationCase:
 
 
 class DatasetGenerationService:
-    def __init__(self, endpoint: str = "localhost:5000") -> None:
+    def __init__(self, endpoint: str) -> None:
         self._endpoint = endpoint
 
     def submit_job(
@@ -31,10 +31,17 @@ class DatasetGenerationService:
         output_dir: Path,
         steps: int,
         config: SimulationConfig,
+        snapshot_stride: int = 1,
     ) -> DatasetJobHandle:
         client = GrpcSimulationClient(self._endpoint)
         try:
-            return client.run_dataset_job(job_id=job_id, output_dir=str(output_dir), steps=steps, config=config)
+            return client.run_dataset_job(
+                job_id=job_id,
+                output_dir=str(output_dir),
+                steps=steps,
+                config=config,
+                snapshot_stride=snapshot_stride,
+            )
         finally:
             client.close()
 
@@ -61,6 +68,7 @@ class DatasetGenerationService:
         base_output_dir: Path,
         nx: int,
         steps: int,
+        snapshot_stride: int = 1,
         poll_seconds: float = 0.5,
         base_config: SimulationConfig | None = None,
     ) -> Path:
@@ -76,7 +84,13 @@ class DatasetGenerationService:
             }
         )
         base_output_dir.mkdir(parents=True, exist_ok=True)
-        handle = self.submit_job(job_id=case.case_id, output_dir=base_output_dir, steps=steps, config=config)
+        handle = self.submit_job(
+            job_id=case.case_id,
+            output_dir=base_output_dir,
+            steps=steps,
+            config=config,
+            snapshot_stride=snapshot_stride,
+        )
         if not handle.ok:
             raise RuntimeError(f"Failed to start dataset job {case.case_id}: {handle.message}")
         status = self.wait_for_job(handle.job_id, poll_seconds=poll_seconds)
@@ -91,6 +105,7 @@ class DatasetGenerationService:
         base_output_dir: Path,
         nx: int,
         steps: int,
+        snapshot_stride: int = 1,
         workers: int = 4,
         poll_seconds: float = 0.5,
     ) -> list[Path]:
@@ -103,6 +118,7 @@ class DatasetGenerationService:
                     base_output_dir=base_output_dir,
                     nx=nx,
                     steps=steps,
+                    snapshot_stride=snapshot_stride,
                     poll_seconds=poll_seconds,
                 )
                 for case in cases
