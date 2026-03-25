@@ -71,16 +71,18 @@ class RuntimeSessionState(ObservableModel):
 
 @dataclass
 class GenerationSessionState(ObservableModel):
-    """UI-параметры генерации датасетов (single / campaign).
-
-    Все поля синхронизированы с DatasetGenerationPanel через autobind.
-    """
+    """Общие UI-параметры генерации датасетов (single и campaign)."""
 
     output_dir: str = field(default_factory=lambda: str(Path.cwd() / "dataset_out"))
     job_id: str = ""
     steps: int = 500
     snapshot_stride: int = 1
-    mode: str = "single"
+
+
+@dataclass
+class CampaignSessionState(ObservableModel):
+    """UI-параметры, специфичные для campaign-режима генерации."""
+
     strategy: str = "lhs"
     sample_count: int = 32
     seed: int = 1234
@@ -95,11 +97,11 @@ class GenerationSessionState(ObservableModel):
 class DatasetJobViewState(ObservableModel):
     """Состояние очереди задач генерации датасетов."""
 
-    active_job_id: str | None = None
     active_job_ids: list[str] = field(default_factory=list)
     total_jobs: int = 0
     completed_jobs: int = 0
     failed_jobs: int = 0
+    progress: int = 0
 
 
 @dataclass

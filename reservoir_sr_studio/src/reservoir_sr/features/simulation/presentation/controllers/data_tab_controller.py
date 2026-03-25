@@ -51,11 +51,11 @@ class DataTabController:
         )
 
         self.generation_ctrl = GenerationController(
+            client=self.client,
             context=self.context,
             widget=self.panel.data_sources_panel.dataset_generation_widget,
             logger=self.logger.child("GenerationController"),
             playback_state=self.playback_state,
-            render_ctrl=self.render_ctrl,
         )
 
         self.dataset_view_ctrl = DatasetViewController(
@@ -139,6 +139,8 @@ class DataTabController:
         data = json.loads(path.read_text(encoding="utf-8"))
         if self.tab_vm.active_tab == TabMode.RUNTIME:
             self.runtime_ctrl.load_config(data.get("runtime", {}))
+        elif self.tab_vm.active_tab == TabMode.GENERATION:
+            self.generation_ctrl.load_config(data.get("dataset", {}))
         self.logger.info("Config loaded", path=str(path), tab=self.tab_vm.active_tab.name)
 
     def _on_save_config(self) -> None:
@@ -146,6 +148,8 @@ class DataTabController:
         data: dict[str, Any] = {}
         if self.tab_vm.active_tab == TabMode.RUNTIME:
             data["runtime"] = self.runtime_ctrl.save_config()
+        elif self.tab_vm.active_tab == TabMode.GENERATION:
+            data["dataset"] = self.generation_ctrl.save_config()
         path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         self.logger.info("Config saved", path=str(path), tab=self.tab_vm.active_tab.name)
 
