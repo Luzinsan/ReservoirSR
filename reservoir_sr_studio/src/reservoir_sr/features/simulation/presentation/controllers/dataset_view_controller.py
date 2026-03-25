@@ -11,6 +11,7 @@ from reservoir_sr.common.qt_binding import autobind
 from reservoir_sr.domain.simulation.archive_models import LoadedArchive
 from reservoir_sr.features.simulation.application.dataset_view_service import DatasetViewService
 from reservoir_sr.features.simulation.presentation.controllers.map_render_controller import MapRenderController
+from reservoir_sr.features.simulation.presentation.controllers.mode_protocol import DataModeController
 from reservoir_sr.features.simulation.presentation.view_models import (
     DatasetViewState,
     FieldSnapshot,
@@ -23,7 +24,7 @@ DATASET_VIEW_BINDINGS = [
 ]
 
 
-class DatasetViewController:
+class DatasetViewController(DataModeController):
     """Загрузка, навигация и отображение архивов симуляции."""
 
     def __init__(
@@ -117,9 +118,6 @@ class DatasetViewController:
             self.render_ctrl.refresh(snapshot)
         else:
             self.render_ctrl.clear()
-
-    def exit(self) -> None:
-        pass
 
     def reset_step(self) -> None:
         """Сбрасывает индекс шага просмотра датасета в начало временного ряда."""

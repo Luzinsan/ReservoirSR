@@ -15,6 +15,7 @@ from reservoir_sr.domain.simulation.config_models import (
 from reservoir_sr.domain.simulation.models import SimulationStepResult
 from reservoir_sr.features.simulation.application.runtime_service import RuntimeService
 from reservoir_sr.features.simulation.presentation.controllers.map_render_controller import MapRenderController
+from reservoir_sr.features.simulation.presentation.controllers.mode_protocol import DataModeController
 from reservoir_sr.features.simulation.presentation.view_models import (
     FieldSnapshot,
     MetricsSnapshot,
@@ -33,7 +34,7 @@ RUNTIME_SESSION_BINDINGS = [
 ]
 
 
-class RuntimeController:
+class RuntimeController(DataModeController):
     """Управление runtime-симуляцией: инициализация, шаги, получение полей."""
 
     _INIT_FIELDS = frozenset({"nx", "q_zab", "obv_p", "r_skv", "mu_pazp"})
@@ -212,4 +213,4 @@ class RuntimeController:
             self.render_ctrl.refresh(self._last_snapshot)
 
     def exit(self) -> None:
-        pass
+        self.render_ctrl.clear()
