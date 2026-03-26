@@ -5,7 +5,6 @@ namespace Simulation.Server.Services;
 
 public sealed class DatasetJobManager
 {
-    private const int ScaleFactor = 4;
     private static readonly string[] DatasetFields = ["P", "ST", "SB"];
 
     private readonly ConcurrentDictionary<string, DatasetJobStatus> _jobs = new(StringComparer.Ordinal);
@@ -116,7 +115,7 @@ public sealed class DatasetJobManager
             Directory.CreateDirectory(spec.OutputDir);
 
             ValidateDatasetConfig(spec.Config);
-            SimulationConfig hrConfig = BuildHrConfig(spec.Config);
+            SimulationConfig hrConfig = BuildHrConfig(spec.Config, spec.HrNx);
             int snapshotStride = Math.Max(spec.SnapshotStride, 1);
             int recordedSteps = (spec.TotalSteps + snapshotStride - 1) / snapshotStride;
 
@@ -265,15 +264,16 @@ public sealed class DatasetJobManager
         }
     }
 
-    private static SimulationConfig BuildHrConfig(SimulationConfig lrConfig)
+    private static SimulationConfig BuildHrConfig(SimulationConfig lrConfig, int hrNx)
     {
+        int scaleFactor = hrNx / Math.Max(lrConfig.NX, 1);
         SimulationConfig hrConfig = lrConfig.Clone();
-        hrConfig.NX = checked(lrConfig.NX * ScaleFactor);
+        hrConfig.NX = hrNx;
         hrConfig.Layers = hrConfig.Layers
             .Select(layer =>
             {
                 LayerConfig scaled = layer.Clone();
-                scaled.NZM = checked(layer.NZM * ScaleFactor);
+                scaled.NZM = checked(layer.NZM * scaleFactor);
                 return scaled;
             })
             .ToArray();
@@ -313,7 +313,8 @@ public sealed record RunDatasetSpec(
     string OutputDir,
     Simulation.Core.SimulationConfig Config,
     int TotalSteps,
-    int SnapshotStride
+    int SnapshotStride,
+    int HrNx
 );
 
 public sealed record DatasetJobStatus(

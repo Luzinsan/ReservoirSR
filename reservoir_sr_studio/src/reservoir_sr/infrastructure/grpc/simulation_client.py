@@ -135,6 +135,7 @@ class GrpcSimulationClient:
         steps: int,
         config: SimulationConfig,
         snapshot_stride: int = 1,
+        hr_nx: int = 0,
     ) -> DatasetJobHandle:
         response = self._stub.RunDatasetJob(
             self._simulation_pb2.RunDatasetJobRequest(
@@ -143,6 +144,7 @@ class GrpcSimulationClient:
                 steps=steps,
                 config=_to_proto_config(self._simulation_pb2, config),
                 snapshot_stride=snapshot_stride,
+                hr_nx=hr_nx,
             )
         )
         return DatasetJobHandle(ok=response.ok, message=response.message, job_id=response.job_id)

@@ -165,6 +165,7 @@ message RunDatasetJobRequest {
   int32 steps = 3;
   SimulationConfig config = 4;
   int32 snapshot_stride = 5;
+  int32 hr_nx = 6;
 }
 
 message RunDatasetJobResponse {

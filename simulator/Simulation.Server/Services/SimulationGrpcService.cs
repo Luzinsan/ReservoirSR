@@ -160,7 +160,8 @@ public sealed class SimulationGrpcService(
                 string.IsNullOrWhiteSpace(request.OutputDir) ? "dataset_out" : request.OutputDir,
                 SimulationConfigMapper.ToCoreConfig(request.Config),
                 request.Steps > 0 ? request.Steps : 1,
-                request.SnapshotStride > 0 ? request.SnapshotStride : 1
+                request.SnapshotStride > 0 ? request.SnapshotStride : 1,
+                request.HrNx > 0 ? request.HrNx : request.Config.Nx * 4
             );
 
             var status = jobManager.Start(spec);
