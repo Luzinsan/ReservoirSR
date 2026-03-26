@@ -77,6 +77,11 @@ class GenerationSessionState(ObservableModel):
     job_id: str = ""
     steps: int = 500
     snapshot_stride: int = 1
+    lr_nx: int = 100
+    hr_nx: int = 400
+    fixed_tu_seconds: float = 86.4
+    fixed_epsp: float = 1e-6
+    progress: int = 0
 
 
 @dataclass
@@ -87,21 +92,6 @@ class CampaignSessionState(ObservableModel):
     sample_count: int = 32
     seed: int = 1234
     workers: int = 4
-    lr_nx: int = 100
-    hr_nx: int = 200
-    fixed_tu_seconds: float = 86.4
-    fixed_epsp: float = 1e-6
-
-
-@dataclass
-class DatasetJobViewState(ObservableModel):
-    """Состояние очереди задач генерации датасетов."""
-
-    active_job_ids: list[str] = field(default_factory=list)
-    total_jobs: int = 0
-    completed_jobs: int = 0
-    failed_jobs: int = 0
-    progress: int = 0
 
 
 @dataclass

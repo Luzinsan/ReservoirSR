@@ -39,6 +39,28 @@ class DatasetGenerationPanel(QtWidgets.QWidget):
         self.snapshot_stride_spin.setValue(1)
         form.addRow("Snapshot stride", self.snapshot_stride_spin)
 
+        self.lr_nx_spin = QtWidgets.QSpinBox()
+        self.lr_nx_spin.setRange(2, 4096)
+        self.lr_nx_spin.setValue(100)
+        form.addRow("LR NX", self.lr_nx_spin)
+
+        self.hr_nx_spin = QtWidgets.QSpinBox()
+        self.hr_nx_spin.setRange(2, 8192)
+        self.hr_nx_spin.setValue(400)
+        form.addRow("HR NX", self.hr_nx_spin)
+
+        self.fixed_tu_spin = QtWidgets.QDoubleSpinBox()
+        self.fixed_tu_spin.setRange(1e-4, 1e6)
+        self.fixed_tu_spin.setDecimals(6)
+        self.fixed_tu_spin.setValue(86.4)
+        form.addRow("TU (sec)", self.fixed_tu_spin)
+
+        self.fixed_epsp_spin = QtWidgets.QDoubleSpinBox()
+        self.fixed_epsp_spin.setRange(1e-12, 1.0)
+        self.fixed_epsp_spin.setDecimals(10)
+        self.fixed_epsp_spin.setValue(1e-6)
+        form.addRow("EPSP", self.fixed_epsp_spin)
+
         self.mode_combo = QtWidgets.QComboBox()
         self.mode_combo.addItem("Single simulation", "single")
         self.mode_combo.addItem("Simulation campaign", "campaign")
@@ -77,28 +99,6 @@ class DatasetGenerationPanel(QtWidgets.QWidget):
         self.workers_spin.setRange(1, 64)
         self.workers_spin.setValue(4)
         campaign_layout.addRow("Workers", self.workers_spin)
-
-        self.lr_nx_spin = QtWidgets.QSpinBox()
-        self.lr_nx_spin.setRange(2, 4096)
-        self.lr_nx_spin.setValue(100)
-        campaign_layout.addRow("Fixed LR NX", self.lr_nx_spin)
-
-        self.hr_nx_spin = QtWidgets.QSpinBox()
-        self.hr_nx_spin.setRange(2, 8192)
-        self.hr_nx_spin.setValue(200)
-        campaign_layout.addRow("Fixed HR NX", self.hr_nx_spin)
-
-        self.fixed_tu_spin = QtWidgets.QDoubleSpinBox()
-        self.fixed_tu_spin.setRange(1e-4, 1e6)
-        self.fixed_tu_spin.setDecimals(6)
-        self.fixed_tu_spin.setValue(86.4)
-        campaign_layout.addRow("Fixed TU (sec)", self.fixed_tu_spin)
-
-        self.fixed_epsp_spin = QtWidgets.QDoubleSpinBox()
-        self.fixed_epsp_spin.setRange(1e-12, 1.0)
-        self.fixed_epsp_spin.setDecimals(10)
-        self.fixed_epsp_spin.setValue(1e-6)
-        campaign_layout.addRow("Fixed EPSP", self.fixed_epsp_spin)
 
         self.mode_stack.addWidget(campaign_page)
         self.mode_stack.setCurrentIndex(0)
