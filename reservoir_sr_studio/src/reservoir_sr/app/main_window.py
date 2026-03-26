@@ -7,7 +7,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from reservoir_sr.app.app_context import AppContext, AppModuleTab
 from reservoir_sr.app.module_protocol import ModuleProtocol
 from reservoir_sr.app.settings_dialog import SettingsDialog
-from reservoir_sr.common.logging import EventLogger
+from reservoir_sr.common.logging import EventLogger, LogPanel
 from reservoir_sr.features.inference.presentation.inference_module import InferenceModule
 from reservoir_sr.features.simulation.presentation.controllers.data_tab_controller import DataTabController
 from reservoir_sr.features.simulation.presentation.panels.data_tab_panel import DataTabPanel
@@ -77,9 +77,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtCore.Qt.DockWidgetArea.BottomDockWidgetArea
             | QtCore.Qt.DockWidgetArea.TopDockWidgetArea
         )
-        self.log_output = QtWidgets.QPlainTextEdit()
-        self.log_output.setReadOnly(True)
-        self.log_output.setMaximumBlockCount(5000)
+        self.log_output = LogPanel()
         self.log_dock.setWidget(self.log_output)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, self.log_dock)
         self.log_dock.hide()
@@ -158,8 +156,8 @@ class MainWindow(QtWidgets.QMainWindow):
         index = self.module_tabs.currentIndex()
         return self._modules[index]
 
-    def _append_log(self, message: str) -> None:
-        self.log_output.appendPlainText(message)
+    def _append_log(self, html: str) -> None:
+        self.log_output.append_html(html)
 
     # ------------------------------------------------------------------
 
