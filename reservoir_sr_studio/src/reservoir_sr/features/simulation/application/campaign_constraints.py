@@ -21,9 +21,7 @@ def validate_physics(config: SimulationConfig, request: SimulationCampaignReques
         return ValidationResult(ok=False, reason="tu_seconds must be > 0")
     if config.tk_days <= 0.0:
         return ValidationResult(ok=False, reason="tk_days must be > 0")
-    if config.nx != request.lr_nx:
-        return ValidationResult(ok=False, reason="nx differs from fixed lr_nx")
-    if request.hr_nx < request.lr_nx:
+    if request.hr_nx < config.nx:
         return ValidationResult(ok=False, reason="hr_nx must be >= lr_nx")
     # Ensure simulated time horizon is long enough for requested steps.
     total_seconds = config.tk_days * 24.0 * 3600.0

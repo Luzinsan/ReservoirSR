@@ -1,9 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import uuid
+from collections.abc import Iterator
+from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from reservoir_sr.domain.simulation.config_models import SimulationConfig
+
+if TYPE_CHECKING:
+    from reservoir_sr.features.simulation.presentation.view_models import (
+        CampaignSessionState,
+        GenerationSessionState,
+    )
 
 
 class SamplingScale(StrEnum):
@@ -23,15 +32,41 @@ class ParameterRange:
 @dataclass(frozen=True)
 class SimulationCampaignRequest:
     campaign_id: str
+    output_dir: str
+    strategy: str
     sample_count: int
     steps: int
-    lr_nx: int
+    snapshot_stride: int
     hr_nx: int
-    fixed_tu_seconds: float
-    fixed_epsp: float
     seed: int
     base_config: SimulationConfig
     ranges: tuple[ParameterRange, ...]
+
+    @classmethod
+    def build(
+        cls,
+        generation: GenerationSessionState,
+        campaign: CampaignSessionState,
+        base_config: SimulationConfig,
+        ranges: tuple[ParameterRange, ...],
+    ) -> SimulationCampaignRequest:
+        return cls(
+            campaign_id=generation.job_id.strip() or f"campaign_{uuid.uuid4().hex[:10]}",
+            output_dir=generation.output_dir,
+            steps=generation.steps,
+            snapshot_stride=generation.snapshot_stride,
+            hr_nx=generation.hr_nx,
+            strategy=campaign.strategy,
+            sample_count=campaign.sample_count,
+            seed=campaign.seed,
+            base_config=replace(
+                base_config,
+                nx=generation.lr_nx,
+                tu_seconds=generation.fixed_tu_seconds,
+                epsp=generation.fixed_epsp,
+            ),
+            ranges=ranges,
+        )
 
 
 @dataclass(frozen=True)
@@ -40,13 +75,24 @@ class SimulationCampaignCase:
     config: SimulationConfig
 
 
-@dataclass(frozen=True)
-class RejectedCase:
-    case_id: str
-    reason: str
+class CampaignCaseStream:
+    """Frozen campaign request + lazy iterator over generated cases."""
 
+    def __init__(
+        self,
+        request: SimulationCampaignRequest,
+        cases: Iterator[SimulationCampaignCase],
+    ) -> None:
+        self.request = request
+        self._cases = cases
+        self._exhausted = False
 
-@dataclass(frozen=True)
-class SimulationCampaignPlan:
-    cases: list[SimulationCampaignCase]
-    rejected: list[RejectedCase]
+    @property
+    def exhausted(self) -> bool:
+        return self._exhausted
+
+    def take(self) -> SimulationCampaignCase | None:
+        case = next(self._cases, None)
+        if case is None:
+            self._exhausted = True
+        return case
