@@ -9,7 +9,8 @@ from reservoir_sr.app.settings_models import DataModuleSettings
 from reservoir_sr.features.simulation.presentation.panels.maps_panel import MapsPanel
 from reservoir_sr.features.simulation.presentation.panels.metrics_panel import MetricsPanel
 from reservoir_sr.features.simulation.presentation.field_plot_renderer import FieldPlotRenderer
-from reservoir_sr.features.simulation.presentation.view_models import FieldSnapshot, RenderViewState
+from reservoir_sr.domain.simulation.value_objects import FieldSnapshot
+from reservoir_sr.features.simulation.presentation.view_models import RenderViewState
 
 RENDER_VIEW_BINDINGS = [
     ("render_mode", "render_mode_combo", "data"),

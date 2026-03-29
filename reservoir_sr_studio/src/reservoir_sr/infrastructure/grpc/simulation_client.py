@@ -7,7 +7,7 @@ import grpc
 import numpy as np
 
 from reservoir_sr.domain.simulation.config_models import ReservoirLayerConfig, SimulationConfig
-from reservoir_sr.domain.simulation.models import (
+from reservoir_sr.domain.simulation.simulation_models import (
     DatasetJobCancellation,
     DatasetJobHandle,
     DatasetJobPause,

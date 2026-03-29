@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from reservoir_sr.domain.simulation.config_models import SimulationConfig, build_simulation_config
-from reservoir_sr.domain.simulation.models import DatasetJobHandle, DatasetJobState, DatasetJobStatus
+from reservoir_sr.domain.simulation.simulation_models import DatasetJobHandle, DatasetJobState, DatasetJobStatus
 from reservoir_sr.infrastructure.grpc.simulation_client import GrpcSimulationClient
 
 

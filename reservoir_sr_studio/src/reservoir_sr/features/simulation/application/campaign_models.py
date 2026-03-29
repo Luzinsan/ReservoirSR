@@ -3,30 +3,16 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from reservoir_sr.domain.simulation.config_models import SimulationConfig
+from reservoir_sr.domain.simulation.value_objects import ParameterRange, SimulationCampaignCase
 
 if TYPE_CHECKING:
     from reservoir_sr.features.simulation.presentation.view_models import (
         CampaignSessionState,
         GenerationSessionState,
     )
-
-
-class SamplingScale(StrEnum):
-    LINEAR = "linear"
-    LOG10 = "log10"
-
-
-@dataclass(frozen=True)
-class ParameterRange:
-    name: str
-    low: float
-    high: float
-    scale: SamplingScale = SamplingScale.LINEAR
-    integer: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,12 +53,6 @@ class SimulationCampaignRequest:
             ),
             ranges=ranges,
         )
-
-
-@dataclass(frozen=True)
-class SimulationCampaignCase:
-    case_id: str
-    config: SimulationConfig
 
 
 class CampaignCaseStream:

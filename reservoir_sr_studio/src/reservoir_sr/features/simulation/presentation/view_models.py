@@ -3,9 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
-from typing import Any
-
-import numpy as np
 
 from reservoir_sr.common.observable import ObservableModel
 from reservoir_sr.domain.simulation.config_models import SimulationConfig
@@ -99,10 +96,8 @@ class DatasetViewState(ObservableModel):
     """Состояние загруженного архива симуляции для просмотра."""
 
     archive_path: Path | None = None
-    arrays: dict[str, np.ndarray] | None = None
-    metadata: dict[str, Any] | None = None
     step_index: int = 0
-    dynamic_index: dict[str, int] = field(default_factory=dict)
+    resolution: str = "lr"
 
 
 @dataclass
@@ -120,46 +115,6 @@ class PlaybackState(ObservableModel):
     step_batch: int = 10
     interval_ms: int = 100
     playback_ready: bool = False
-
-
-@dataclass
-class MetricsSnapshot:
-    """Временные ряды метрик для графиков. Value object (не ObservableModel)."""
-
-    time: list[float] = field(default_factory=list)
-    ai: list[float] = field(default_factory=list)
-    ait: list[float] = field(default_factory=list)
-    aib: list[float] = field(default_factory=list)
-
-    def append(self, t: float, ai: float, ait: float, aib: float) -> None:
-        self.time.append(t)
-        self.ai.append(ai)
-        self.ait.append(ait)
-        self.aib.append(aib)
-
-    def clear(self) -> None:
-        self.time.clear()
-        self.ai.clear()
-        self.ait.clear()
-        self.aib.clear()
-
-    def copy(self) -> MetricsSnapshot:
-        return MetricsSnapshot(
-            time=list(self.time),
-            ai=list(self.ai),
-            ait=list(self.ait),
-            aib=list(self.aib),
-        )
-
-
-@dataclass
-class FieldSnapshot:
-    """Снимок полей для отрисовки — 3 канала + размеры сцены + опциональные метрики."""
-
-    fields: dict[str, np.ndarray]
-    scene_dims: tuple[float, float]
-    metrics: MetricsSnapshot | None = None
-    layer_boundaries: np.ndarray | None = None
 
 
 @dataclass

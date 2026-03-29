@@ -7,10 +7,12 @@ from typing import Protocol
 import numpy as np
 
 from reservoir_sr.domain.simulation.config_models import SimulationConfig
-from reservoir_sr.features.simulation.application.campaign_models import (
+from reservoir_sr.domain.simulation.value_objects import (
     ParameterRange,
     SamplingScale,
     SimulationCampaignCase,
+)
+from reservoir_sr.features.simulation.application.campaign_models import (
     SimulationCampaignRequest,
 )
 

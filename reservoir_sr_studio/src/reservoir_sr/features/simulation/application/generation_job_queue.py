@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from reservoir_sr.common.logging import EventLogger
 from reservoir_sr.domain.simulation.config_models import SimulationConfig
-from reservoir_sr.domain.simulation.models import DatasetJobState
+from reservoir_sr.domain.simulation.simulation_models import DatasetJobState
 from reservoir_sr.features.simulation.application.campaign_models import CampaignCaseStream
 from reservoir_sr.infrastructure.grpc.simulation_client import GrpcSimulationClient
 
