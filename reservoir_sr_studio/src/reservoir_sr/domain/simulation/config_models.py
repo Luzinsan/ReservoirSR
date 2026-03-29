@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 @dataclass(frozen=True)
 class ReservoirLayerConfig:
-    nzm: int = 4
+    nzm: int = 10
     hbm: float = 2.0
     vmb: float = 0.2
     vmt: float = 0.04

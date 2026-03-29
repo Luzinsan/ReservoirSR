@@ -181,7 +181,6 @@ class RuntimeController(DataModeController):
         sim_fields = self._client.get_fields(self.state.simulation_id, self._DEFAULT_FIELDS)
         return FieldSnapshot(
             fields={fg.name: fg.values for fg in sim_fields.data.values()},
-            scene_dims=(float(self.state.nx), float(self.state.nz)),
             metrics=self._metrics,
             layer_boundaries=self.layer_boundaries(),
         )

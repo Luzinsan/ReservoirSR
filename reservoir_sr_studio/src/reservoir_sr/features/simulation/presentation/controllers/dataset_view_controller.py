@@ -95,7 +95,6 @@ class DatasetViewController(DataModeController):
         time, ai, ait, aib = ds.metrics_arrays(step)
         return FieldSnapshot(
             fields=ds.field_arrays(step, self.state.resolution),
-            scene_dims=ds.scene_dims(),
             metrics=MetricsSnapshot(time=time, ai=ai, ait=ait, aib=aib),
         )
 

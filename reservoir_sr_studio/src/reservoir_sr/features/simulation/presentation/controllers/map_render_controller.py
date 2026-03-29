@@ -75,7 +75,10 @@ class MapRenderController:
     def refresh(self, snapshot: FieldSnapshot) -> None:
         """Принимает снимок полей от режима-контроллера, кеширует и отрисовывает."""
         self._snapshot = snapshot
-        self.state.scene_dims = snapshot.scene_dims
+        arr = next(iter(snapshot.fields.values()), None)
+        if arr is not None:
+            nz, nx = arr.shape
+            self.state.scene_dims = (float(nx), float(nz))
         self._flush_metrics_curves()
         self._render()
 

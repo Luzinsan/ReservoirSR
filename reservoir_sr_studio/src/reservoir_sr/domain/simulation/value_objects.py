@@ -67,9 +67,8 @@ class MetricsSnapshot:
 
 @dataclass
 class FieldSnapshot:
-    """Снимок полей для отрисовки — каналы + размеры сцены + опциональные метрики."""
+    """Снимок полей для отрисовки — каналы + опциональные метрики."""
 
     fields: dict[str, np.ndarray]
-    scene_dims: tuple[float, float]
     metrics: MetricsSnapshot | None = None
     layer_boundaries: np.ndarray | None = None
