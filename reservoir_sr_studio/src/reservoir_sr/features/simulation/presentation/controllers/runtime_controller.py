@@ -12,13 +12,12 @@ from reservoir_sr.domain.simulation.config_models import (
     SimulationConfig,
     simulation_config_from_mapping,
 )
-from reservoir_sr.domain.simulation.models import SimulationStepResult
-from reservoir_sr.features.simulation.application.runtime_service import RuntimeService
+from reservoir_sr.domain.simulation.simulation_models import SimulationStepResult
 from reservoir_sr.features.simulation.presentation.controllers.map_render_controller import MapRenderController
 from reservoir_sr.features.simulation.presentation.controllers.mode_protocol import DataModeController
+from reservoir_sr.domain.simulation.value_objects import FieldSnapshot, MetricsSnapshot
+from reservoir_sr.infrastructure.grpc.simulation_client import GrpcSimulationClient
 from reservoir_sr.features.simulation.presentation.view_models import (
-    FieldSnapshot,
-    MetricsSnapshot,
     PlaybackState,
     RuntimeSessionState,
     RuntimeTrackingState,
@@ -38,10 +37,11 @@ class RuntimeController(DataModeController):
     """Управление runtime-симуляцией: инициализация, шаги, получение полей."""
 
     _INIT_FIELDS = frozenset({"nx", "q_zab", "obv_p", "r_skv", "mu_pazp"})
+    _DEFAULT_FIELDS = ("P", "ST", "SB")
 
     def __init__(
         self,
-        service: RuntimeService,
+        client: GrpcSimulationClient,
         widget: object,
         logger: EventLogger,
         render_ctrl: MapRenderController,
@@ -49,7 +49,7 @@ class RuntimeController(DataModeController):
         playback_state: PlaybackState,
     ) -> None:
         # Зависимости
-        self.service = service
+        self._client = client
         self.logger = logger
         self.render_ctrl = render_ctrl
         self.context = context
@@ -87,10 +87,8 @@ class RuntimeController(DataModeController):
         for name in type(self.state).__dataclass_fields__:
             setattr(self.state, name, getattr(defaults, name))
         self.needs_init = True
-        self._metrics.clear()
-        self._last_snapshot = None
+        self.clear_session_data()
         self.logger.action("Runtime reset to defaults")
-        self.clear_tracking()
 
     # ------------------------------------------------------------------
     # Config persistence
@@ -121,10 +119,9 @@ class RuntimeController(DataModeController):
     # ------------------------------------------------------------------
 
     def initialize(self) -> None:
-        assert self.service is not None
         cfg = self.build_config()
         self.logger.info("Initialize runtime simulation")
-        response = self.service.initialize("", cfg)
+        response = self._client.initialize("", cfg)
         if not response.ok:
             self.logger.error("Runtime initialization failed", detail=response.message)
             raise RuntimeError(response.message)
@@ -142,12 +139,12 @@ class RuntimeController(DataModeController):
     def prepare(self) -> None:
         """Подготавливает runtime-сессию перед началом воспроизведения."""
         if self.needs_init:
+            self.clear_session_data()
             self.initialize()
 
     def advance(self, step_count: int) -> SimulationStepResult:
         """Запрашивает у сервера продвижение симуляции на указанное число шагов."""
-        assert self.service is not None
-        step = self.service.step(self.state.simulation_id, step_count=step_count)
+        step = self._client.step(self.state.simulation_id, step_count=step_count)
         if not step.ok:
             self.logger.error("Runtime step failed", detail=step.message)
             raise RuntimeError(step.message)
@@ -162,8 +159,10 @@ class RuntimeController(DataModeController):
         self.tracking.prev_pz = float(step.p_zab)
         return step, dq, dpz
 
-    def clear_tracking(self) -> None:
-        """Очищает историю значений для расчета приращений между шагами."""
+    def clear_session_data(self) -> None:
+        """Очищает метрики, кеш полей и tracking предыдущей сессии."""
+        self._metrics.clear()
+        self._last_snapshot = None
         self.tracking.prev_q = None
         self.tracking.prev_pz = None
         self.logger.debug("Runtime tracking cleared")
@@ -179,7 +178,7 @@ class RuntimeController(DataModeController):
 
     def _build_snapshot(self) -> FieldSnapshot:
         """Запрашивает все 3 канала у сервера и формирует FieldSnapshot с метриками (ссылка)."""
-        sim_fields = self.service.get_fields(self.state.simulation_id)
+        sim_fields = self._client.get_fields(self.state.simulation_id, self._DEFAULT_FIELDS)
         return FieldSnapshot(
             fields={fg.name: fg.values for fg in sim_fields.data.values()},
             scene_dims=(float(self.state.nx), float(self.state.nz)),

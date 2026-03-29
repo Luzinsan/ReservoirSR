@@ -9,8 +9,6 @@ from PySide6 import QtWidgets
 from reservoir_sr.app.app_context import AppContext, AppModuleTab
 from reservoir_sr.common.logging import EventLogger
 from reservoir_sr.common.qt_binding import autobind
-from reservoir_sr.features.simulation.application.dataset_view_service import DatasetViewService
-from reservoir_sr.features.simulation.application.runtime_service import RuntimeService
 from reservoir_sr.features.simulation.presentation.controllers.dataset_view_controller import DatasetViewController
 from reservoir_sr.features.simulation.presentation.controllers.generation_controller import GenerationController
 from reservoir_sr.features.simulation.presentation.controllers.map_render_controller import MapRenderController
@@ -43,7 +41,7 @@ class DataTabController:
 
         self.runtime_ctrl = RuntimeController(
             context=self.context,
-            service=RuntimeService(self.client),
+            client=self.client,
             widget=self.panel.data_sources_panel.runtime_widget,
             logger=self.logger.child("RuntimeController"),
             render_ctrl=self.render_ctrl,
@@ -60,8 +58,7 @@ class DataTabController:
 
         self.dataset_view_ctrl = DatasetViewController(
             context=self.context,
-            service=DatasetViewService(),
-            widget=self.panel.data_sources_panel.dataset_view_widget,
+            panel=self.panel.data_sources_panel.dataset_view_widget,
             logger=self.logger.child("DatasetViewController"),
             playback_state=self.playback_state,
             render_ctrl=self.render_ctrl,
