@@ -12,6 +12,7 @@ from reservoir_sr.domain.simulation.dataset_models import (
     LoadedDataset,
     normalize_condition_spec,
 )
+from reservoir_sr.infrastructure.ml.normalizer import Normalizer
 from reservoir_sr.infrastructure.storage.sr_archive_io import load_sr_archive
 
 
@@ -21,6 +22,9 @@ class SrFrameDataset(Dataset):
     Each sample is one timestep from one simulation archive,
     returning an LR/HR field pair and an optional condition vector
     assembled from the requested scalar groups.
+
+    If a ``Normalizer`` is provided, fields and scalars are
+    normalized inside ``__getitem__``.
     """
 
     def __init__(
@@ -28,9 +32,11 @@ class SrFrameDataset(Dataset):
         archive_paths: list[Path],
         cache_size: int = 32,
         condition: ConditionSpec = ("dynamic", "static", "layers"),
+        normalizer: Normalizer | None = None,
     ) -> None:
         self._paths = archive_paths
         self._condition = normalize_condition_spec(condition)
+        self._norm = normalizer
         self._load_cached = lru_cache(maxsize=cache_size)(self._load)
 
         self._index: list[tuple[int, int]] = []
@@ -45,14 +51,28 @@ class SrFrameDataset(Dataset):
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         archive_idx, t = self._index[idx]
         ds = self._load_cached(archive_idx)
+        norm = self._norm
+
+        lr = ds.field_tensor(t, "lr")
+        hr = ds.field_tensor(t, "hr")
+
+        if norm is not None:
+            lr = norm.normalize_fields(lr, "lr")
+            hr = norm.normalize_fields(hr, "hr")
 
         result: dict[str, torch.Tensor] = {
-            "lr": torch.from_numpy(ds.field_tensor(t, "lr")),
-            "hr": torch.from_numpy(ds.field_tensor(t, "hr")),
+            "lr": torch.from_numpy(lr),
+            "hr": torch.from_numpy(hr),
         }
 
         extractors = LoadedDataset.CONDITION_EXTRACTORS
-        parts = [extractors[g](ds, t, names) for g, names in self._condition.items()]
+        parts: list[np.ndarray] = []
+        for group, names in self._condition.items():
+            raw = extractors[group](ds, t, names)
+            if norm is not None:
+                raw = norm.normalize_scalars(raw, group, names)
+            parts.append(raw)
+
         if parts:
             result["condition"] = torch.from_numpy(
                 np.concatenate(parts).astype(np.float32)
