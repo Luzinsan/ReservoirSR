@@ -6,9 +6,9 @@ from pathlib import Path
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parents[4]
+    root = Path(__file__).resolve().parents[5]
     proto = root / "simulator" / "Simulation.Contracts" / "Protos" / "simulation.proto"
-    out_dir = root / "reservoir_sr_studio" / "src" / "reservoir_sr" / "infrastructure" / "grpc" / "generated"
+    out_dir = Path(__file__).resolve().parent / "generated"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [

@@ -5,7 +5,6 @@ from pathlib import Path
 from reservoir_sr.app.app_context import AppContext
 from reservoir_sr.common.logging import EventLogger
 from reservoir_sr.common.qt_binding import autobind
-from reservoir_sr.domain.simulation.dataset_models import LoadedDataset
 from reservoir_sr.domain.simulation.value_objects import FieldSnapshot, MetricsSnapshot
 from reservoir_sr.features.simulation.presentation.controllers.map_render_controller import MapRenderController
 from reservoir_sr.features.simulation.presentation.controllers.mode_protocol import DataModeController
@@ -15,6 +14,7 @@ from reservoir_sr.features.simulation.presentation.view_models import (
     PlaybackState,
 )
 from reservoir_sr.infrastructure.storage.sr_archive_io import load_sr_archive
+from reservoir_sr.ml.data.loaded_archive import LoadedArchive
 
 DATASET_VIEW_BINDINGS = [
     ("step_index", "step_slider", "value"),
@@ -39,7 +39,7 @@ class DatasetViewController(DataModeController):
         self.logger = logger
         self.playback_state = playback_state
         self.render_ctrl = render_ctrl
-        self._dataset: LoadedDataset | None = None
+        self._dataset: LoadedArchive | None = None
 
         autobind(self.state, self._panel, DATASET_VIEW_BINDINGS)
         self._connect_signals()
@@ -192,7 +192,7 @@ class DatasetViewController(DataModeController):
             raise FileNotFoundError(f"Simulation archive not found: {path}")
         self.logger.info("Load dataset archive", path=str(path))
         arrays, metadata = load_sr_archive(path)
-        self._dataset = LoadedDataset(arrays, metadata)
+        self._dataset = LoadedArchive(arrays, metadata)
         self.state.step_index = 0
         self.state.archive_path = path
         self.playback_state.playback_ready = True

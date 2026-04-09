@@ -21,9 +21,17 @@ dependencies = [
 [project.scripts]
 reservoir-sr-studio = "reservoir_sr.app.__main__:main"
 reservoir-sr-build-dataset = "reservoir_sr.tools.build_dataset:main"
-reservoir-sr-generate-proto = "reservoir_sr.tools.generate_proto:main"
+ reservoir-sr-generate-proto = "reservoir_sr.infrastructure.grpc.generate_proto:main"
+reservoir-sr-train = "reservoir_sr.tools.train:main"
 
 [project.optional-dependencies]
+ml = [
+  "torch>=2.6",
+  "lightning>=2.6",
+  "torchmetrics>=1.6",
+  "hydra-core>=1.3",
+  "omegaconf>=2.3",
+]
 dev = [
   "grpcio-tools>=1.71",
   "pytest>=8.0",
