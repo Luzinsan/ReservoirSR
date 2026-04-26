@@ -1,0 +1,31 @@
+# ==========================================================================
+# Все параметры нормализуются zscore.
+# ==========================================================================
+
+fields:
+  P: zscore
+  ST: zscore
+  SB: zscore
+
+layers:
+  geometry: zscore
+  porosity: zscore
+  saturation: zscore
+  permeability: log_zscore
+  flags: none
+
+dynamic:
+  time: none
+  accumulation: zscore
+  well_dynamic: zscore
+  dissipation: zscore
+  temperature: zscore
+
+static:
+  fluid_props: zscore
+  reservoir: zscore
+  well_ops: zscore
+  time_config: none
+  grid: none
+  flags: none
+  solver: none

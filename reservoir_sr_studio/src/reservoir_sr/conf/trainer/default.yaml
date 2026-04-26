@@ -1,0 +1,33 @@
+# ==========================================================================
+# Стандартная конфигурация Lightning Trainer.
+# Умеренное обучение: 100 эпох, mixed precision, auto-accelerator.
+# ==========================================================================
+
+# Максимальное число эпох обучения.
+# Одна эпоха = один полный проход по train-датасету.
+max_epochs: 100
+
+# Тип ускорителя: auto выбирает GPU если доступен, иначе CPU.
+accelerator: auto
+
+# Mixed precision: 16-mixed использует float16 для forward/backward,
+# float32 для optimizer update. Ускоряет обучение на ~30% на GPU.
+precision: 16-mixed
+
+# Как часто логировать train метрики (в training steps).
+log_every_n_steps: 10
+
+# Gradient clipping — ограничивает норму градиента.
+# Предотвращает exploding gradients, особенно важно на начальных эпохах.
+gradient_clip_val: 1.0
+
+# Как часто запускать валидацию (в эпохах).
+# Визуализации и heavy-метрики (SSIM) логируются каждую валидацию.
+check_val_every_n_epoch: 5
+
+# Число сэмплов для визуализации полей (LR / HR / SR / |diff|).
+vis_n_samples: 3
+
+# Deterministic mode: гарантирует воспроизводимость за счёт скорости.
+# false = недетерминированные CUDA-ядра разрешены (быстрее).
+deterministic: false

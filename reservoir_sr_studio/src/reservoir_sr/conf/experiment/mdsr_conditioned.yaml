@@ -1,0 +1,26 @@
+# @package _global_
+#
+# Experiment: MDSR с FiLM-кондиционированием.
+# Модель получает полный condition-вектор (dynamic + static + layers).
+#
+# Использование:
+#   python -m reservoir_sr.tools.train +experiment=mdsr_conditioned
+
+defaults:
+  - override /model: mdsr
+  - override /trainer: default
+  - override /data/condition: full
+
+globals:
+  experiment_name: mdsr_conditioned
+
+model:
+  res_scale: 0.1
+  n_blocks: 16
+  condition_embed_dim: 256
+  optimizer:
+    lr: 0.0002
+
+trainer:
+  max_epochs: 100
+  gradient_clip_val: 5.0

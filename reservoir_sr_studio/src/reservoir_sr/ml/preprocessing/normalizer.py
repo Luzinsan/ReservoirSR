@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 import numpy as np
+from omegaconf import ListConfig
 
 from reservoir_sr.domain.training.norm_config import (
-    NormConfig,
     NormStrategy,
     resolve_strategy,
     validate_config,
@@ -31,18 +31,17 @@ class Normalizer:
     def __init__(
         self,
         stats: NormalizationStats,
-        config: NormConfig | None = None,
+        config: dict[str, Any] | None = None,
         n_layers: int = 5,
     ) -> None:
-        self._config = config or NormConfig()
+        self._config = config or {}
         self._stats = stats
         self._n_layers = n_layers
 
-        validate_config(self._config, {
+        norm_cfg = self._config.get("norm", {})
+        
+        validate_config(norm_cfg, {
             "fields": set(stats.lr_fields.keys()),
-            "dynamic": set(stats.dynamic.keys()),
-            "static": set(stats.static.keys()),
-            "layers": set(stats.layers.keys()),
         })
 
         self._lr_shift, self._lr_scale, self._lr_log = self._build_field_params("lr")
@@ -109,7 +108,8 @@ class Normalizer:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """Build ``(C, 1, 1)`` shift/scale/log_mask for one resolution."""
         group = self._stats.lr_fields if resolution == "lr" else self._stats.hr_fields
-        strategies = [resolve_strategy(self._config, "fields", ch) for ch in group]
+        norm_cfg = self._config.get("norm", {})
+        strategies = [resolve_strategy(norm_cfg, "fields", ch) for ch in group]
         pairs = [self._shift_scale(fs, s) for fs, s in zip(group.values(), strategies)]
 
         shift = np.array([p[0] for p in pairs], dtype=np.float32).reshape(-1, 1, 1)
@@ -136,15 +136,30 @@ class Normalizer:
         scales: dict[str, np.ndarray] = {}
         logs: dict[str, np.ndarray | None] = {}
         indices: dict[str, dict[str, int]] = {}
-
+        condition_cfg = self._config.get("condition", {})
+        
         for section in self._SCALAR_SECTIONS:
             group_stats: dict[str, FeatureStats] = getattr(self._stats, section)
+            
+            section_condition = condition_cfg.get(section)
+            
+            if not section_condition:
+                shifts[section] = np.array([], dtype=np.float32)
+                scales[section] = np.array([], dtype=np.float32)
+                logs[section] = None
+                indices[section] = {}
+                continue
+                
             ordered = list(group_stats.keys())
-            strategies = [resolve_strategy(self._config, section, n) for n in ordered]
+            
+            if isinstance(section_condition, (list, ListConfig)):
+                ordered = [n for n in ordered if n in set(section_condition)]
+                
+            strategies = [resolve_strategy(self._config.get("norm", {}), section, n) for n in ordered]
             pairs = [self._shift_scale(group_stats[n], s) for n, s in zip(ordered, strategies)]
 
-            shifts[section] = np.array([p[0] for p in pairs], dtype=np.float32)
-            scales[section] = np.array([p[1] for p in pairs], dtype=np.float32)
+            shifts[section] = np.array([p[0] for p in pairs], dtype=np.float32) if pairs else np.array([], dtype=np.float32)
+            scales[section] = np.array([p[1] for p in pairs], dtype=np.float32) if pairs else np.array([], dtype=np.float32)
             logs[section] = self._log_mask(strategies)
             indices[section] = {n: i for i, n in enumerate(ordered)}
 

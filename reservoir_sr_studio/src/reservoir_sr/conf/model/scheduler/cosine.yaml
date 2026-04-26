@@ -1,0 +1,15 @@
+# ==========================================================================
+# Cosine annealing scheduler.
+# LR плавно уменьшается от начального значения до eta_min
+# по косинусной кривой за T_max эпох.
+# ==========================================================================
+
+# Класс PyTorch. instantiate() передаст optimizer= при вызове.
+_target_: torch.optim.lr_scheduler.CosineAnnealingLR
+
+# Период косинусного цикла (число эпох).
+# Интерполируется из trainer: ${trainer.max_epochs}.
+T_max: ${trainer.max_epochs}
+
+# Минимальный learning rate в конце цикла.
+eta_min: 0.00001
