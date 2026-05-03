@@ -10,7 +10,7 @@ seed: 42
 # Имя проекта.
 project_name: reservoir_sr
 
-# Имя эксперимента — используется как подкаталог TensorBoard логов.
+# Имя эксперимента.
 # Переопределяется в каждом experiment/*.yaml.
 experiment_name: default
 
@@ -18,17 +18,27 @@ experiment_name: default
 # null = обучение с нуля.
 resume_from: null
 
-# ── TensorBoard ──────────────────────────────────────────────────
-tensorboard:
-  # Директория для сохранения TensorBoard логов.
-  save_dir: logs
+# ── MLflow ───────────────────────────────────────────────────────
+mlflow:
+  # Для локального MLflow server:
+  #   http://127.0.0.1:5000
+  tracking_uri: http://127.0.0.1:5000
 
-  # Имя подкаталога: по умолчанию берётся из experiment_name.
-  name: ${globals.experiment_name}
+  # Имя эксперимента в MLflow UI.
+  experiment_name: ${globals.experiment_name}
+
+  # Имя конкретного run.
+  run_name: ${globals.experiment_name}
+
+  # Локальная директория артефактов (актуально для file-store).
+  save_dir: ./mlruns
+
+  # Логировать ли model artifact через Lightning MLflowLogger.
+  log_model: false
 
 # ── Profiler ─────────────────────────────────────────────────
 # Профилирование пайплайна обучения.
 # simple  = текстовая сводка (DataLoader vs forward vs backward)
-# pytorch = полный torch.profiler с TensorBoard trace
+# pytorch = полный torch.profiler trace
 # null    = отключено
 profiler: null

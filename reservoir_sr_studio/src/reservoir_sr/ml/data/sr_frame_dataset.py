@@ -63,6 +63,8 @@ class SrFrameDataset(Dataset):
         result: dict[str, torch.Tensor] = {
             "lr": torch.from_numpy(lr),
             "hr": torch.from_numpy(hr),
+            "archive_idx": torch.tensor(archive_idx, dtype=torch.int64),
+            "step_idx": torch.tensor(t, dtype=torch.int64),
         }
 
         extractors = LoadedArchive.CONDITION_EXTRACTORS

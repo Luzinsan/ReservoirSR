@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.figure
 import numpy as np
+from pathlib import Path
+import tempfile
+from typing import Any
 
 
 CHANNEL_NAMES = ("P", "ST", "SB")
@@ -48,47 +51,123 @@ CHANNEL_CMAPS = (CMAP_P, CMAP_ST, CMAP_SB)
 
 
 class SrVisualizationCallback(pl.Callback):
-    """Logs LR / HR / SR / |diff| field images to TensorBoard.
+    """Logs fixed validation SR samples to active logger.
 
-    Buffers the last validation batch (late timesteps with more detail)
-    and logs visualizations at the end of every validation epoch.
-    Frequency is controlled by ``check_val_every_n_epoch`` in the Trainer.
+    Selection policy:
+    1) Collect samples across the whole validation epoch grouped by archive_idx.
+    2) For each archive keep only the latest timestep (max step_idx).
+    3) Pick a fixed subset of archives (size n_samples) and log those every epoch.
     """
 
     def __init__(self, n_samples: int = 2):
         self.n_samples = n_samples
-        self._last_batch: dict[str, torch.Tensor] | None = None
+        self._latest_by_archive: dict[int, dict[str, torch.Tensor]] = {}
+        self._fixed_archives: list[int] | None = None
+
+    def on_validation_epoch_start(self, trainer, pl_module):
+        self._latest_by_archive = {}
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
-        self._last_batch = {k: v.detach().cpu() for k, v in batch.items()}
-
-    def on_validation_epoch_end(self, trainer, pl_module):
-        if self._last_batch is None or trainer.logger is None:
+        if "archive_idx" not in batch or "step_idx" not in batch:
             return
 
-        batch = {k: v.to(pl_module.device) for k, v in self._last_batch.items()}
+        archive_idx = batch["archive_idx"].detach().cpu()
+        step_idx = batch["step_idx"].detach().cpu()
+
+        bs = int(archive_idx.shape[0])
+        for i in range(bs):
+            a = int(archive_idx[i].item())
+            s = int(step_idx[i].item())
+            prev = self._latest_by_archive.get(a)
+            prev_step = int(prev["step_idx"].item()) if prev is not None else -1
+            if s >= prev_step:
+                sample: dict[str, torch.Tensor] = {}
+                for k, v in batch.items():
+                    sample[k] = v[i].detach().cpu()
+                self._latest_by_archive[a] = sample
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        if not self._latest_by_archive or trainer.logger is None:
+            return
+
+        samples = self._select_fixed_samples()
+        if not samples:
+            return
+
+        vis_batch = _stack_samples(samples)
+        model_batch = {
+            k: v.to(pl_module.device)
+            for k, v in vis_batch.items()
+            if k not in {"hr", "archive_idx", "step_idx"}
+        }
+
         with torch.no_grad():
-            pred = pl_module.model(batch).float().cpu()
-        target = self._last_batch["hr"].float()
-        lr = self._last_batch["lr"].float()
+            pred = pl_module.model(model_batch).float().cpu()
+        target = vis_batch["hr"].float()
+        lr = vis_batch["lr"].float()
 
-        bs = pred.shape[0]
-        indices = torch.randperm(bs)[: self.n_samples]
-
-        for sample_idx in indices:
+        for i in range(pred.shape[0]):
+            archive_id = int(vis_batch["archive_idx"][i].item())
+            step_id = int(vis_batch["step_idx"][i].item())
+            tag = f"fields/archive_{archive_id:03d}_step_{step_id:05d}"
             fig = _make_figure(
-                lr[sample_idx].numpy(),
-                target[sample_idx].numpy(),
-                pred[sample_idx].numpy(),
+                lr[i].numpy(),
+                target[i].numpy(),
+                pred[i].numpy(),
             )
-            trainer.logger.experiment.add_figure(
-                f"fields/sample_{sample_idx.item()}",
-                fig,
-                global_step=trainer.global_step,
-            )
+            self._log_figure(trainer, fig, tag)
             plt.close(fig)
 
-        self._last_batch = None
+        self._latest_by_archive = {}
+
+    def _select_fixed_samples(self) -> list[dict[str, torch.Tensor]]:
+        archives = sorted(self._latest_by_archive.keys())
+        if not archives:
+            return []
+
+        n = min(self.n_samples, len(archives))
+        if self._fixed_archives is None:
+            # Deterministic fixed subset: tail archives in validation ordering.
+            self._fixed_archives = archives[-n:]
+        else:
+            # Keep previous selection if available; backfill missing slots deterministically.
+            keep = [a for a in self._fixed_archives if a in self._latest_by_archive]
+            needed = n - len(keep)
+            if needed > 0:
+                pool = [a for a in archives if a not in keep]
+                keep.extend(pool[-needed:])
+            self._fixed_archives = keep[:n]
+
+        return [self._latest_by_archive[a] for a in self._fixed_archives]
+
+    def _log_figure(self, trainer: pl.Trainer, fig: matplotlib.figure.Figure, tag: str) -> None:
+        logger = trainer.logger
+        if logger is None:
+            return
+
+        experiment = getattr(logger, "experiment", None)
+
+        # TensorBoard-like API.
+        if experiment is not None and hasattr(experiment, "add_figure"):
+            experiment.add_figure(tag, fig, global_step=trainer.global_step)
+            return
+
+        # MLflow logger API via MlflowClient.
+        run_id = getattr(logger, "run_id", None)
+        if experiment is not None and run_id is not None and hasattr(experiment, "log_artifact"):
+            with tempfile.TemporaryDirectory(prefix="sr_viz_") as tmp_dir:
+                file_name = f"{tag.replace('/', '_')}_step_{trainer.global_step}.png"
+                local_path = Path(tmp_dir) / file_name
+                fig.savefig(local_path, dpi=120, bbox_inches="tight")
+                experiment.log_artifact(run_id, str(local_path), artifact_path="figures")
+
+
+def _stack_samples(samples: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
+    keys = samples[0].keys()
+    out: dict[str, torch.Tensor] = {}
+    for k in keys:
+        out[k] = torch.stack([s[k] for s in samples], dim=0)
+    return out
 
 
 def _make_figure(lr: np.ndarray, hr: np.ndarray, sr: np.ndarray) -> matplotlib.figure.Figure:

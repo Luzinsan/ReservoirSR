@@ -1,0 +1,16 @@
+# @package _global_
+#
+# Experiment: SRGAN-like training with MSRResNet generator.
+
+defaults:
+  - override /task: gan
+  - override /model: gan_srresnet
+  - override /trainer: default
+  - override /data/condition: none
+
+globals:
+  experiment_name: gan_srresnet
+
+trainer:
+  max_epochs: 150
+  gradient_clip_val: 1.0

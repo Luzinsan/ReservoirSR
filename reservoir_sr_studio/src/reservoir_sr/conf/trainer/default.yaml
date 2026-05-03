@@ -1,21 +1,28 @@
 # ==========================================================================
-# Стандартная конфигурация Lightning Trainer.
-# Умеренное обучение: 100 эпох, mixed precision, auto-accelerator.
+# Стандартная конфигурация Lightning Trainer для 1x NVIDIA H100.
+# Явно задаёт single-GPU профиль для всех запусков по умолчанию.
 # ==========================================================================
 
 # Максимальное число эпох обучения.
 # Одна эпоха = один полный проход по train-датасету.
 max_epochs: 100
 
-# Тип ускорителя: auto выбирает GPU если доступен, иначе CPU.
-accelerator: auto
+# Явно используем 1 GPU.
+accelerator: gpu
+devices: 1
+num_nodes: 1
 
-# Mixed precision: 16-mixed использует float16 для forward/backward,
-# float32 для optimizer update. Ускоряет обучение на ~30% на GPU.
-precision: 16-mixed
+# На H100 bf16 обычно предпочтительнее fp16 по стабильности.
+precision: bf16-mixed
+
+# Для single-GPU отдельная DDP-стратегия не нужна.
+strategy: auto
+
+# autotune cuDNN для фиксированных размеров.
+benchmark: true
 
 # Как часто логировать train метрики (в training steps).
-log_every_n_steps: 10
+log_every_n_steps: 20
 
 # Gradient clipping — ограничивает норму градиента.
 # Предотвращает exploding gradients, особенно важно на начальных эпохах.
@@ -23,10 +30,10 @@ gradient_clip_val: 1.0
 
 # Как часто запускать валидацию (в эпохах).
 # Визуализации и heavy-метрики (SSIM) логируются каждую валидацию.
-check_val_every_n_epoch: 5
+check_val_every_n_epoch: 10
 
 # Число сэмплов для визуализации полей (LR / HR / SR / |diff|).
-vis_n_samples: 3
+vis_n_samples: 1
 
 # Deterministic mode: гарантирует воспроизводимость за счёт скорости.
 # false = недетерминированные CUDA-ядра разрешены (быстрее).
