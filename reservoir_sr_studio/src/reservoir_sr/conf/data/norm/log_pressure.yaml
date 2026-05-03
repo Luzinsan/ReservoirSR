@@ -1,0 +1,31 @@
+# ==========================================================================
+# Log-нормализация для давления, остальное по умолчанию.
+# ==========================================================================
+
+fields:
+  P: log_zscore
+  ST: minmax
+  SB: minmax
+
+layers:
+  geometry: minmax
+  porosity: minmax
+  saturation: minmax
+  permeability: log_minmax
+  flags: none
+
+dynamic:
+  time: none
+  accumulation: minmax
+  well_dynamic: minmax
+  dissipation: zscore
+  temperature: minmax
+
+static:
+  fluid_props: minmax
+  reservoir: minmax
+  well_ops: minmax
+  time_config: none
+  grid: none
+  flags: none
+  solver: none

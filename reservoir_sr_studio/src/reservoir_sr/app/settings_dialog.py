@@ -1,0 +1,165 @@
+from __future__ import annotations
+
+from PySide6 import QtWidgets
+
+from reservoir_sr.app.app_context import AppContext
+from reservoir_sr.app.settings_models import normalize_endpoint
+from reservoir_sr.common.qt_binding import autobind
+
+GENERAL_BINDINGS = [
+    ("endpoint", "endpoint_edit", "text"),
+    ("project_directory", "project_directory_edit", "text"),
+    ("log_level", "log_level_combo", "data"),
+]
+
+DATA_BINDINGS = [
+    ("isoline_layer_mode", "data_isoline_mode_combo", "data"),
+    ("palette_name", "data_palette_combo", "data"),
+    ("isoline_width", "data_isoline_width_spin", "value"),
+    ("isoline_level_stride", "data_isoline_stride_spin", "value"),
+    ("vector_color_name", "data_vector_color_edit", "text"),
+    ("show_legend", "data_show_legend_checkbox", "checked"),
+    ("live_render", "data_live_render_checkbox", "checked"),
+]
+
+TRAINING_BINDINGS = [
+    ("default_device", "training_device_combo", "data"),
+    ("default_dataset_dir", "training_dataset_dir_edit", "text"),
+    ("default_checkpoint_dir", "training_checkpoint_dir_edit", "text"),
+    ("default_num_workers", "training_workers_spin", "value"),
+    ("mixed_precision", "training_mixed_precision_checkbox", "checked"),
+]
+
+INFERENCE_BINDINGS = [
+    ("default_device", "inference_device_combo", "data"),
+    ("default_model_dir", "inference_model_dir_edit", "text"),
+    ("default_input_dir", "inference_input_dir_edit", "text"),
+    ("default_output_dir", "inference_output_dir_edit", "text"),
+    ("default_batch_size", "inference_batch_spin", "value"),
+    ("cache_results", "inference_cache_checkbox", "checked"),
+]
+
+
+class SettingsDialog(QtWidgets.QDialog):
+    def __init__(self, context: AppContext, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._context = context
+        self._draft = context.snapshot()
+        self.setWindowTitle("Settings")
+        self.resize(560, 420)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        self.tabs = QtWidgets.QTabWidget()
+        layout.addWidget(self.tabs)
+
+        self._build_general_tab()
+        self._build_data_tab()
+        self._build_training_tab()
+        self._build_inference_tab()
+        self._bind_models()
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _build_general_tab(self) -> None:
+        tab = QtWidgets.QWidget()
+        form = QtWidgets.QFormLayout(tab)
+
+        self.endpoint_edit = QtWidgets.QLineEdit()
+        self.project_directory_edit = QtWidgets.QLineEdit()
+        self.log_level_combo = QtWidgets.QComboBox()
+        self.log_level_combo.addItem("debug", "debug")
+        self.log_level_combo.addItem("info", "info")
+        self.log_level_combo.addItem("warning", "warning")
+        self.log_level_combo.addItem("error", "error")
+
+        form.addRow("gRPC endpoint", self.endpoint_edit)
+        form.addRow("Default project dir", self.project_directory_edit)
+        form.addRow("Log level", self.log_level_combo)
+        self.tabs.addTab(tab, "General")
+
+    def _build_data_tab(self) -> None:
+        tab = QtWidgets.QWidget()
+        form = QtWidgets.QFormLayout(tab)
+
+        self.data_isoline_mode_combo = QtWidgets.QComboBox()
+        self.data_isoline_mode_combo.addItem("off", "off")
+        self.data_isoline_mode_combo.addItem("overlay", "overlay")
+        self.data_isoline_mode_combo.addItem("only", "only")
+        self.data_palette_combo = QtWidgets.QComboBox()
+        for palette_name in ("geographical", "water_oil", "mud_water", "ocean", "dawn", "sunset", "rainbow"):
+            self.data_palette_combo.addItem(palette_name, palette_name)
+        self.data_isoline_width_spin = QtWidgets.QSpinBox()
+        self.data_isoline_width_spin.setRange(1, 8)
+        self.data_isoline_stride_spin = QtWidgets.QSpinBox()
+        self.data_isoline_stride_spin.setRange(1, 32)
+        self.data_vector_color_edit = QtWidgets.QLineEdit()
+        self.data_show_legend_checkbox = QtWidgets.QCheckBox("Show legend")
+        self.data_live_render_checkbox = QtWidgets.QCheckBox("Live render")
+
+        form.addRow("Isoline mode", self.data_isoline_mode_combo)
+        form.addRow("Palette", self.data_palette_combo)
+        form.addRow("Isoline width", self.data_isoline_width_spin)
+        form.addRow("Isoline stride", self.data_isoline_stride_spin)
+        form.addRow("Vector color", self.data_vector_color_edit)
+        form.addRow("", self.data_show_legend_checkbox)
+        form.addRow("", self.data_live_render_checkbox)
+        self.tabs.addTab(tab, "Data")
+
+    def _build_training_tab(self) -> None:
+        tab = QtWidgets.QWidget()
+        form = QtWidgets.QFormLayout(tab)
+
+        self.training_device_combo = QtWidgets.QComboBox()
+        for device_name in ("auto", "cpu", "cuda"):
+            self.training_device_combo.addItem(device_name, device_name)
+        self.training_dataset_dir_edit = QtWidgets.QLineEdit()
+        self.training_checkpoint_dir_edit = QtWidgets.QLineEdit()
+        self.training_workers_spin = QtWidgets.QSpinBox()
+        self.training_workers_spin.setRange(1, 128)
+        self.training_mixed_precision_checkbox = QtWidgets.QCheckBox("Mixed precision")
+
+        form.addRow("Default device", self.training_device_combo)
+        form.addRow("Default dataset dir", self.training_dataset_dir_edit)
+        form.addRow("Default checkpoint dir", self.training_checkpoint_dir_edit)
+        form.addRow("Default workers", self.training_workers_spin)
+        form.addRow("", self.training_mixed_precision_checkbox)
+        self.tabs.addTab(tab, "Training")
+
+    def _build_inference_tab(self) -> None:
+        tab = QtWidgets.QWidget()
+        form = QtWidgets.QFormLayout(tab)
+
+        self.inference_device_combo = QtWidgets.QComboBox()
+        for device_name in ("auto", "cpu", "cuda"):
+            self.inference_device_combo.addItem(device_name, device_name)
+        self.inference_model_dir_edit = QtWidgets.QLineEdit()
+        self.inference_input_dir_edit = QtWidgets.QLineEdit()
+        self.inference_output_dir_edit = QtWidgets.QLineEdit()
+        self.inference_batch_spin = QtWidgets.QSpinBox()
+        self.inference_batch_spin.setRange(1, 1024)
+        self.inference_cache_checkbox = QtWidgets.QCheckBox("Cache results")
+
+        form.addRow("Default device", self.inference_device_combo)
+        form.addRow("Default model dir", self.inference_model_dir_edit)
+        form.addRow("Default input dir", self.inference_input_dir_edit)
+        form.addRow("Default output dir", self.inference_output_dir_edit)
+        form.addRow("Default batch size", self.inference_batch_spin)
+        form.addRow("", self.inference_cache_checkbox)
+        self.tabs.addTab(tab, "Inference")
+
+    def _bind_models(self) -> None:
+        autobind(self._draft.general, self, GENERAL_BINDINGS)
+        autobind(self._draft.data, self, DATA_BINDINGS)
+        autobind(self._draft.training, self, TRAINING_BINDINGS)
+        autobind(self._draft.inference, self, INFERENCE_BINDINGS)
+
+    def accept(self) -> None:
+        self._draft.general.endpoint = normalize_endpoint(self._draft.general.endpoint)
+        self._context.apply_from(self._draft)
+        super().accept()

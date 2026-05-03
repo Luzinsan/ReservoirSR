@@ -1,0 +1,50 @@
+# ==========================================================================
+# GAN config: MSRResNet generator + SRGAN-style discriminator.
+# ==========================================================================
+
+generator:
+  _target_: reservoir_sr.ml.models.srresnet.MSRResNet
+  in_channels: 3
+  out_channels: 3
+  scale: 4
+  n_blocks: 8
+  n_features: 64
+  res_scale: 0.1
+
+discriminator:
+  _target_: reservoir_sr.ml.models.discriminators.SRResNetDiscriminator
+  in_channels: 3
+  base_channels: 64
+
+pixel_loss:
+  _target_: torch.nn.L1Loss
+
+adv_loss:
+  _target_: torch.nn.BCEWithLogitsLoss
+
+pixel_weight: 1.0
+adv_weight: 0.005
+d_steps: 1
+g_steps: 1
+
+g_optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.0001
+  betas: [0.9, 0.99]
+  weight_decay: 0.0
+
+d_optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.0001
+  betas: [0.9, 0.99]
+  weight_decay: 0.0
+
+g_scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: ${trainer.max_epochs}
+  eta_min: 0.00001
+
+d_scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: ${trainer.max_epochs}
+  eta_min: 0.00001

@@ -1,0 +1,28 @@
+# ==========================================================================
+# RRDBNet (Residual-in-Residual Dense Block Network).
+# Генератор ESRGAN — безусловная SR-модель высокой ёмкости.
+#
+# 23 блока RRDB × 3 RDB × 5 dense conv = 345 свёрточных слоёв.
+# ~16.7M параметров. Без BatchNorm, с residual scaling 0.2.
+# ==========================================================================
+
+defaults:
+  - optimizer: adamw
+  - scheduler: cosine
+  - loss: l1
+
+_target_: reservoir_sr.ml.models.rrdbnet.RRDBNet
+
+# Число входных и выходных каналов (P, ST, SB)
+in_channels: 3
+out_channels: 3
+
+# Коэффициент увеличения разрешения (×4 по обоим осям)
+# LR 50×100 → HR 200×400
+scale: 4
+
+# Параметры архитектуры RRDB
+n_blocks: 16
+n_features: 64
+growth_channels: 32
+res_scale: 0.2

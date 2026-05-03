@@ -1,0 +1,31 @@
+# ==========================================================================
+# MDSR (Multiscale Deep Super-Resolution).
+# Поддерживает безусловный и условный (FiLM) режимы.
+#
+# condition_dim задаётся автоматически в train.py на основе data/condition.
+# condition_embed_dim — размер скрытого эмбеддинга для FiLM.
+# ==========================================================================
+
+defaults:
+  - optimizer: adamw
+  - scheduler: cosine
+  - loss: l1
+
+# Класс модели — инстанцируется через hydra.utils.instantiate().
+_target_: reservoir_sr.ml.models.mdsr.MDSRBaseline
+
+# Число входных и выходных каналов
+in_channels: 3
+out_channels: 3
+
+# Коэффициент увеличения разрешения по оси X
+scale: 4
+
+# Параметры архитектуры MDSR
+n_blocks: 16
+n_features: 64
+res_scale: 1.0
+
+# Conditioning (FiLM). Перезаписывается runtime из data/condition.
+condition_dim: 0
+condition_embed_dim: 256

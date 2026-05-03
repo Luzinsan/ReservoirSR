@@ -1,0 +1,24 @@
+# @package _global_
+#
+# Experiment: MDSR baseline.
+# Безусловная SR-модель (без condition-вектора).
+#
+# Использование:
+#   python -m reservoir_sr.tools.train +experiment=mdsr_baseline
+
+defaults:
+  - override /model: mdsr
+  - override /trainer: default
+  - override /data/condition: none
+
+globals:
+  experiment_name: mdsr_baseline
+
+model:
+  res_scale: 0.1
+  optimizer:
+    lr: 0.0002
+
+trainer:
+  max_epochs: 100
+  gradient_clip_val: 5.0

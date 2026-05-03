@@ -1,0 +1,15 @@
+# ==========================================================================
+# Корневой конфиг обучения SR-модели.
+#
+# Запуск:
+#   python -m reservoir_sr.tools.train +experiment=mdsr_baseline
+#   python -m reservoir_sr.tools.train model=mdsr trainer.max_epochs=50
+# ==========================================================================
+
+defaults:
+  - globals: default
+  - data: default
+  - task: sr
+  - model: mdsr
+  - trainer: default
+  - _self_

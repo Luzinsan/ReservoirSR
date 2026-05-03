@@ -1,0 +1,19 @@
+# ==========================================================================
+# MSRResNet (light SRResNet-style generator).
+# Лёгкий и стабильный генератор без downsampling в feature-space.
+# ==========================================================================
+
+defaults:
+  - optimizer: adamw
+  - scheduler: cosine
+  - loss: l1
+
+_target_: reservoir_sr.ml.models.srresnet.MSRResNet
+
+in_channels: 3
+out_channels: 3
+scale: 4
+
+n_blocks: 8
+n_features: 64
+res_scale: 0.1
