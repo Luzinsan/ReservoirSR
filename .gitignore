@@ -1,0 +1,21 @@
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Python virtualenvs
+.venv/
+venv/
+
+# Dotnet artifacts
+**/bin/
+**/obj/
+
+# IDE
+.vs/
+.idea/
+
+reservoir_sr_studio/logs/*
+torch-cu121/*
+reservoir_sr_studio/outputs/*

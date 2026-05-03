@@ -1,0 +1,215 @@
+syntax = "proto3";
+
+option csharp_namespace = "Simulation.Contracts";
+
+package simulation;
+
+service SimulationService {
+  rpc InitializeSimulation (InitializeSimulationRequest) returns (InitializeSimulationResponse);
+  rpc StepSimulation (StepSimulationRequest) returns (StepSimulationResponse);
+  rpc GetFields (GetFieldsRequest) returns (GetFieldsResponse);
+  rpc RunDatasetJob (RunDatasetJobRequest) returns (RunDatasetJobResponse);
+  rpc GetJobStatus (GetJobStatusRequest) returns (GetJobStatusResponse);
+  rpc CancelJob (CancelJobRequest) returns (CancelJobResponse);
+  rpc PauseJob (PauseJobRequest) returns (PauseJobResponse);
+  rpc ResumeJob (ResumeJobRequest) returns (ResumeJobResponse);
+}
+
+message InitializeSimulationRequest {
+  string simulation_id = 1;
+  SimulationConfig config = 2;
+}
+
+message InitializeSimulationResponse {
+  string simulation_id = 1;
+  bool ok = 2;
+  string message = 3;
+  int32 nx = 4;
+  int32 nz = 5;
+}
+
+message StepSimulationRequest {
+  string simulation_id = 1;
+  int32 step_count = 2;
+}
+
+message StepSimulationResponse {
+  bool ok = 1;
+  string message = 2;
+  int32 steps_performed = 3;
+  double time = 4;
+  double ai = 5;
+  double ait = 6;
+  double aib = 7;
+  double p_zab = 8;
+  double q_fld = 9;
+  double diss = 10;
+  double disq = 11;
+  double tbt = 12;
+  double tb = 13;
+  double tt = 14;
+  double q_oil_total = 15;
+  double q_oil_blocks = 16;
+  double q_oil_fractures = 17;
+}
+
+message GetFieldsRequest {
+  string simulation_id = 1;
+  repeated string fields = 2;
+}
+
+message FieldData {
+  string name = 1;
+  repeated double values = 2;
+}
+
+message GetFieldsResponse {
+  bool ok = 1;
+  string message = 2;
+  int32 nx = 3;
+  int32 nz = 4;
+  repeated FieldData data = 5;
+}
+
+message LayerConfig {
+  int32 nzm = 1;
+  double hbm = 2;
+  double vmb = 3;
+  double vmt = 4;
+  int32 lwn = 5;
+  int32 lwd = 6;
+  double snt = 7;
+  double snb = 8;
+  double svt = 9;
+  double svb = 10;
+  double akt = 11;
+  double akb = 12;
+}
+
+message SimulationConfig {
+  int32 nb = 1;
+  double vl = 2;
+  int32 lod = 3;
+  int32 liz = 4;
+  double r_skv = 5;
+
+  double ro1_pl = 6;
+  double ro1_deg = 7;
+  double mu1_pl = 8;
+  double mu_deg = 9;
+  double ap1 = 10;
+  double at1 = 11;
+  double c_p_1 = 12;
+
+  double ro3_pl = 13;
+  double mu3_pl = 14;
+  double c_p_3 = 15;
+  double ap3 = 16;
+  double at3 = 17;
+
+  double r00 = 18;
+  double c_p_2 = 19;
+  double ves_g_mol = 20;
+  double ytap2 = 21;
+  double dzt = 22;
+  double zg = 23;
+  double r_c_r = 24;
+  double qunt_cr = 25;
+  double radz0 = 26;
+  double sm = 27;
+  double s_t_r = 28;
+
+  double vg0 = 29;
+  double ph0 = 30;
+  double bt = 31;
+  double bg = 32;
+
+  double bt_cp = 33;
+  double bt_tr = 34;
+
+  double mu_pazp = 35;
+  double x_a = 36;
+  double x_d = 37;
+
+  double q_zab = 38;
+  double obv_p = 39;
+  double qq = 40;
+  double p32 = 41;
+
+  double tvk = 42;
+  double tk_days = 43;
+  int32 ltvk = 44;
+  int32 ltk = 45;
+  double dso = 46;
+
+  double tu_seconds = 47;
+  int32 n_dr = 48;
+  int32 nx = 49;
+
+  double epsp = 50;
+  double enb = 51;
+  double evb = 52;
+  double ent = 53;
+  double evt = 54;
+
+  double tim_0 = 55;
+  double tim_1 = 56;
+  double tim_2 = 57;
+
+  repeated LayerConfig layers = 58;
+}
+
+message RunDatasetJobRequest {
+  string job_id = 1;
+  string output_dir = 2;
+  int32 steps = 3;
+  SimulationConfig config = 4;
+  int32 snapshot_stride = 5;
+  int32 hr_nx = 6;
+}
+
+message RunDatasetJobResponse {
+  bool ok = 1;
+  string message = 2;
+  string job_id = 3;
+}
+
+message GetJobStatusRequest {
+  string job_id = 1;
+}
+
+message GetJobStatusResponse {
+  string job_id = 1;
+  string state = 2;
+  string message = 3;
+  int32 steps_done = 4;
+  int32 steps_total = 5;
+  string output_path = 6;
+}
+
+message CancelJobRequest {
+  string job_id = 1;
+}
+
+message CancelJobResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+message PauseJobRequest {
+  string job_id = 1;
+}
+
+message PauseJobResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+message ResumeJobRequest {
+  string job_id = 1;
+}
+
+message ResumeJobResponse {
+  bool ok = 1;
+  string message = 2;
+}

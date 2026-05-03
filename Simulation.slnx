@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/simulator/">
+    <Project Path="simulator/Simulation.Contracts/Simulation.Contracts.csproj" />
+    <Project Path="simulator/Simulation.Core/Simulation.Core.csproj" />
+    <Project Path="simulator/Simulation.Physics/Simulation.Physics.csproj" />
+    <Project Path="simulator/Simulation.Server/Simulation.Server.csproj" />
+  </Folder>
+</Solution>

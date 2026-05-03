@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "reservoir-sr-studio"
+version = "0.1.0"
+description = "PyQt desktop studio for reservoir super-resolution workflows."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+  { name = "Luzinsan" }
+]
+dependencies = [
+  "grpcio>=1.71",
+  "numpy>=1.26",
+  "PySide6>=6.8",
+  "pyqtgraph>=0.13",
+  "hydra-core>=1.3.2",
+  "matplotlib>=3.10.9",
+  "lightning>=2.6.1",
+  "torchmetrics>=1.9.0",
+  "tensorboard>=2.20.0",
+  "omegaconf>=2.3.0",
+]
+
+[project.scripts]
+reservoir-sr-studio = "reservoir_sr.app.__main__:main"
+reservoir-sr-build-dataset = "reservoir_sr.tools.build_dataset:main"
+ reservoir-sr-generate-proto = "reservoir_sr.infrastructure.grpc.generate_proto:main"
+reservoir-sr-train = "reservoir_sr.tools.train:main"
+
+[[tool.uv.index]]
+url = "https://artifactory.tcsbank.ru/artifactory/api/pypi/python-all/simple/"
+default = true
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[dependency-groups]
+ml = [
+  "lightning>=2.6.1",
+  "torchmetrics>=1.6",
+  "omegaconf>=2.3",
+  "tensorboard>=2.15",
+]
+dev = [
+  "grpcio-tools>=1.71",
+  "pytest>=8.0",
+  "ruff>=0.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reservoir_sr"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/reservoir_sr",
+  "tests",
+  "README.md",
+  "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
