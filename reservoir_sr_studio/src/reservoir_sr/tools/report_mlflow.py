@@ -203,8 +203,7 @@ def _parse_args() -> argparse.Namespace:
             "mdsr_conditioned",
             "rrdb_baseline",
             "srresnet_baseline",
-            "gan_srresnet",
-            "gan_esrgan",
+            "rrdb_v1"
         ],
         help="Experiment names to include.",
     )
@@ -216,7 +215,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default="reports",
+        default="artifacts/reports",
         help="Output directory for exported report files.",
     )
     return parser.parse_args()

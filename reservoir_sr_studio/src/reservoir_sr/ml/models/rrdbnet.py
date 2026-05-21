@@ -2,16 +2,10 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ResidualDenseBlock(nn.Module):
-    """5-layer dense block with residual scaling (as in ESRGAN).
-
-    Each conv receives the concatenation of the original input and
-    all preceding conv outputs.  Growth rate ``gc`` controls how many
-    channels each internal layer adds.
-    """
-
     def __init__(self, n_features: int = 64, growth_channels: int = 32, res_scale: float = 0.2):
         super().__init__()
         gc = growth_channels
@@ -22,6 +16,14 @@ class ResidualDenseBlock(nn.Module):
         self.conv5 = nn.Conv2d(n_features + 4 * gc, n_features, 3, 1, 1, bias=True)
         self.act = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         self.res_scale = res_scale
+        self._init_weights()
+
+    def _init_weights(self) -> None:
+        for m in [self.conv1, self.conv2, self.conv3, self.conv4, self.conv5]:
+            nn.init.kaiming_normal_(m.weight, a=0.2, mode="fan_in", nonlinearity="leaky_relu")
+            m.weight.data *= 0.1
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x1 = self.act(self.conv1(x))
@@ -33,8 +35,6 @@ class ResidualDenseBlock(nn.Module):
 
 
 class RRDB(nn.Module):
-    """Residual-in-Residual Dense Block: 3 cascaded RDBs with outer residual."""
-
     def __init__(self, n_features: int = 64, growth_channels: int = 32, res_scale: float = 0.2):
         super().__init__()
         self.rdb1 = ResidualDenseBlock(n_features, growth_channels, res_scale)
@@ -50,15 +50,6 @@ class RRDB(nn.Module):
 
 
 class RRDBNet(nn.Module):
-    """ESRGAN generator based on Residual-in-Residual Dense Blocks.
-
-    Unconditional SR: predicts HR fields from LR fields only.
-    Accepts the full batch dict from the dataloader, uses only ``lr``.
-
-    Architecture:
-        head  → 23 × RRDB → body_tail + global skip →
-        2 × (Conv + PixelShuffle(2) + LeakyReLU) → hr_conv → tail
-    """
 
     def __init__(
         self,
@@ -69,47 +60,46 @@ class RRDBNet(nn.Module):
         growth_channels: int = 32,
         scale: int = 4,
         res_scale: float = 0.2,
+        unshuffle_factor: int = 2,
         **kwargs,
     ):
         super().__init__()
+        if scale != 4:
+            raise NotImplementedError(f"RRDBNet supports scale=4 only, got {scale}.")
 
-        self.head = nn.Conv2d(in_channels, n_features, 3, 1, 1, bias=True)
+        self.unshuffle_factor = unshuffle_factor
+        self.unshuffle = nn.PixelUnshuffle(unshuffle_factor) if unshuffle_factor > 1 else nn.Identity()
+        head_in = in_channels * (unshuffle_factor ** 2)
 
+        self.head = nn.Conv2d(head_in, n_features, 3, 1, 1, bias=True)
         self.blocks = nn.ModuleList(
             [RRDB(n_features, growth_channels, res_scale) for _ in range(n_blocks)]
         )
         self.body_tail = nn.Conv2d(n_features, n_features, 3, 1, 1, bias=True)
 
-        # PixelShuffle upsampling: two ×2 stages for ×4 total
-        self.up1_conv = nn.Conv2d(n_features, n_features * 4, 3, 1, 1, bias=True)
-        self.up1_shuffle = nn.PixelShuffle(2)
-        self.up2_conv = nn.Conv2d(n_features, n_features * 4, 3, 1, 1, bias=True)
-        self.up2_shuffle = nn.PixelShuffle(2)
+        total_up = scale * unshuffle_factor
+        n_up = int(total_up).bit_length() - 1 
+        self.upsample = nn.Sequential()
+        for i in range(n_up):
+            self.upsample.add_module(f"up_conv_{i}", nn.Conv2d(n_features, n_features * 4, 3, 1, 1))
+            self.upsample.add_module(f"up_shuf_{i}", nn.PixelShuffle(2))
+            self.upsample.add_module(f"up_act_{i}", nn.LeakyReLU(0.2, inplace=True))
 
         self.hr_conv = nn.Conv2d(n_features, n_features, 3, 1, 1, bias=True)
         self.tail = nn.Conv2d(n_features, out_channels, 3, 1, 1, bias=True)
-
-        self.act = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-
-        if scale != 4:
-            raise NotImplementedError(
-                f"RRDBNet only supports scale=4, got {scale}. "
-                "Adjust the upsampling stages for other factors."
-            )
+        self.act = nn.LeakyReLU(0.2, inplace=True)
 
     def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         x = batch["lr"]
+        x = self.unshuffle(x)
 
         head = self.head(x)
-
         body = head
         for block in self.blocks:
             body = block(body)
         body = self.body_tail(body)
         feat = head + body
 
-        feat = self.act(self.up1_shuffle(self.up1_conv(feat)))
-        feat = self.act(self.up2_shuffle(self.up2_conv(feat)))
-
+        feat = self.upsample(feat)
         feat = self.act(self.hr_conv(feat))
         return self.tail(feat)

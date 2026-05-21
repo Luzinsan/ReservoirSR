@@ -17,10 +17,10 @@ defaults:
 source:
   # Путь к директории с .npz-архивами симуляций.
   # Каждый архив — один прогон (T timesteps × 3 channels × Z × X).
-  dataset_dir: /home/luzinsan/data/dataset_out
+  dataset_dir: /mnt/home/dataset
 
   # Путь к файлу со статистикой нормализации (генерируется автоматически).
-  stats_path: ./stats.json
+  stats_path: ${globals.artifacts_dir}/stats/stats.json
 
   # Размер LRU-кэша загруженных архивов в SrFrameDataset.
   # Чем больше — тем меньше повторных чтений с диска.

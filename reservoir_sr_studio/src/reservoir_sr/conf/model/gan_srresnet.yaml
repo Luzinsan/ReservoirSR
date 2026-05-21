@@ -1,5 +1,6 @@
 # ==========================================================================
 # GAN config: MSRResNet generator + SRGAN-style discriminator.
+# Relativistic average GAN (RaGAN) + VGG perceptual loss + label smoothing.
 # ==========================================================================
 
 generator:
@@ -19,13 +20,39 @@ discriminator:
 pixel_loss:
   _target_: torch.nn.L1Loss
 
+perceptual_loss:
+  _target_: reservoir_sr.ml.training.gan_module.VGGPerceptualLoss
+  in_channels: 3
+
 adv_loss:
   _target_: torch.nn.BCEWithLogitsLoss
 
-pixel_weight: 1.0
+# Баланс лоссов — pixel доминирует (для физических полей это критично)
+pixel_weight: 10.0
+perc_weight: 1.0
 adv_weight: 0.005
+
+# Relativistic average GAN
+use_ragan: true
+
+# Label smoothing
+real_label: 0.9
+fake_label: 0.0
+
+# D/G steps per iteration
 d_steps: 1
 g_steps: 1
+
+# Warmup: первые N эпох только pixel+perceptual (D стоит)
+# Полезно, если стартуем не с pretrain-чекпоинта
+warmup_epochs: 0
+
+# Manual gradient clipping (Trainer-level отключён для GAN)
+grad_clip_val: 1.0
+
+# Путь к чекпоинту srresnet_baseline для hot-start генератора.
+# ОБЯЗАТЕЛЬНО укажите после первого прогона srresnet_baseline.
+resume_generator_from: './4/53e01ed75ac846d29ad37d43c4ab41ea/checkpoints/epoch=099.ckpt'
 
 g_optimizer:
   _target_: torch.optim.Adam
@@ -35,16 +62,16 @@ g_optimizer:
 
 d_optimizer:
   _target_: torch.optim.Adam
-  lr: 0.0001
+  lr: 0.00005              # D медленнее G — не даём ему доминировать
   betas: [0.9, 0.99]
   weight_decay: 0.0
 
 g_scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   T_max: ${trainer.max_epochs}
-  eta_min: 0.00001
+  eta_min: 0.000001
 
 d_scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   T_max: ${trainer.max_epochs}
-  eta_min: 0.00001
+  eta_min: 0.000001

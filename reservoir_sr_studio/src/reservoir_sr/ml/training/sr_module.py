@@ -1,4 +1,5 @@
 from __future__ import annotations
+from copy import deepcopy
 
 import pytorch_lightning as pl
 import torch
@@ -31,14 +32,6 @@ def _build_metrics(p: str) -> tuple[MetricCollection, MetricCollection]:
 
 
 class SrLitModule(pl.LightningModule):
-    """Lightning wrapper for any SR model.
-
-    All components (model, loss, optimizer, scheduler) are instantiated
-    from the Hydra config via ``_target_`` keys.
-
-    The full batch dict is forwarded to the model, so each architecture
-    can decide which keys it consumes (e.g. only ``lr``, or ``lr`` + ``condition``).
-    """
 
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
@@ -46,6 +39,14 @@ class SrLitModule(pl.LightningModule):
         self.cfg = cfg
 
         self.model: nn.Module = instantiate(cfg.model, _recursive_=False)
+        self.ema_decay = float(cfg.model.get("ema_decay", 0.999))
+        self.use_ema = self.ema_decay > 0
+        if self.use_ema:
+            self.ema_model = deepcopy(self.model)
+            for p in self.ema_model.parameters():
+                p.requires_grad_(False)
+            self.ema_model.eval()
+            
         self.loss_fn: nn.Module = instantiate(cfg.model.loss)
 
         val_light, val_heavy = _build_metrics("val")
@@ -54,10 +55,6 @@ class SrLitModule(pl.LightningModule):
         self.val_heavy = val_heavy
         self.test_metrics = test_light
         self.test_heavy = test_heavy
-
-    # ------------------------------------------------------------------
-    # Training
-    # ------------------------------------------------------------------
 
     def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         pred = self.model(batch)
@@ -71,9 +68,17 @@ class SrLitModule(pl.LightningModule):
 
         return loss
 
-    # ------------------------------------------------------------------
-    # Validation / Test
-    # ------------------------------------------------------------------
+    def on_train_batch_end(self, outputs, batch, batch_idx) -> None:
+        if not self.use_ema:
+            return
+        with torch.no_grad():
+            for ema_p, p in zip(self.ema_model.parameters(), self.model.parameters()):
+                ema_p.data.mul_(self.ema_decay).add_(p.data, alpha=1.0 - self.ema_decay)
+            for ema_b, b in zip(self.ema_model.buffers(), self.model.buffers()):
+                ema_b.data.copy_(b.data)
+
+    def _eval_model(self) -> nn.Module:
+        return self.ema_model if self.use_ema else self.model
 
     def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> None:
         self._eval_step(batch, self.val_metrics, self.val_heavy, "val")
@@ -89,7 +94,7 @@ class SrLitModule(pl.LightningModule):
         prefix: str,
     ) -> None:
         sd = {"sync_dist": True}
-        pred = self.model(batch).float()
+        pred = self._eval_model()(batch).float()
         target = batch["hr"].float()
 
         self.log(f"{prefix}/loss", self.loss_fn(pred, target), prog_bar=True, **sd)
@@ -110,10 +115,6 @@ class SrLitModule(pl.LightningModule):
         self.log(f"{prefix}_physics/max_ae", (pred - target).abs().max(), **sd)
         self.log(f"{prefix}_physics/grad_mae", _gradient_mae(pred, target), **sd)
 
-    # ------------------------------------------------------------------
-    # Optimizers & Schedulers
-    # ------------------------------------------------------------------
-
     def configure_optimizers(self):
         optimizer = instantiate(
             self.cfg.model.optimizer,
@@ -133,10 +134,6 @@ class SrLitModule(pl.LightningModule):
             },
         }
 
-
-# ======================================================================
-# Functional helpers
-# ======================================================================
 
 def _psnr(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     mse = torch.mean((pred - target) ** 2)

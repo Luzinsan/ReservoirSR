@@ -24,16 +24,16 @@ class CampaignSamplingStrategy(Protocol):
 
 
 def _apply_parameter(config: SimulationConfig, name: str, value: object) -> SimulationConfig:
-    if name == "layer_akt_scale":
-        return replace(
-            config,
-            layers=[replace(layer, akt=max(1e-8, float(layer.akt) * float(value))) for layer in config.layers],
-        )
-    if name == "layer_akb_scale":
-        return replace(
-            config,
-            layers=[replace(layer, akb=max(1e-8, float(layer.akb) * float(value))) for layer in config.layers],
-        )
+    if name.startswith("layer_") and name.endswith("_akt"):
+        layer_idx = int(name.split("_")[1])
+        updated = list(config.layers)
+        updated[layer_idx] = replace(updated[layer_idx], akt=max(1e-8, float(value)))
+        return replace(config, layers=updated)
+    if name.startswith("layer_") and name.endswith("_akb"):
+        layer_idx = int(name.split("_")[1])
+        updated = list(config.layers)
+        updated[layer_idx] = replace(updated[layer_idx], akb=max(1e-8, float(value)))
+        return replace(config, layers=updated)
     if name == "layer_snt_shift":
         shift = float(value)
         updated = []

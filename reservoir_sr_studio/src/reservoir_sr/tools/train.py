@@ -9,6 +9,19 @@ Usage:
     reservoir-sr-train globals.profiler=pytorch        -- full torch profiler
 """
 from __future__ import annotations
+import torch
+
+_original_torch_load = torch.load
+
+
+def _torch_load_unsafe(*args, **kwargs):
+    kwargs["weights_only"] = False
+    return _original_torch_load(*args, **kwargs)
+
+
+torch.load = _torch_load_unsafe
+
+from pathlib import Path
 
 import hydra
 import pytorch_lightning as pl
@@ -50,6 +63,10 @@ def _count_trainable(module) -> int:
 def main(cfg: DictConfig) -> None:
     pl.seed_everything(cfg.globals.seed, workers=True)
 
+    artifacts_dir = Path(cfg.globals.artifacts_dir)
+    ckpt_dir = artifacts_dir / "checkpoints" / cfg.globals.experiment_name
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+
     datamodule = SrDataModule(cfg.data)
 
     OmegaConf.set_struct(cfg, False)
@@ -59,7 +76,7 @@ def main(cfg: DictConfig) -> None:
         cfg.model.generator.condition_dim = datamodule.condition_dim
     OmegaConf.set_struct(cfg, True)
 
-    task_name = cfg.get("task", {}).get("name", "sr")
+    task_name = cfg.task
     if task_name == "gan":
         lit_module = GanLitModule(cfg)
         monitor_metric = "val/g_total"
@@ -104,13 +121,14 @@ def main(cfg: DictConfig) -> None:
         benchmark=cfg.trainer.get("benchmark", False),
         log_every_n_steps=cfg.trainer.log_every_n_steps,
         check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
-        gradient_clip_val=cfg.trainer.gradient_clip_val,
+        gradient_clip_val=cfg.trainer.gradient_clip_val if task_name != "gan" else None,
         deterministic=cfg.trainer.deterministic,
-        default_root_dir=".",
+        default_root_dir=str(artifacts_dir),
         logger=logger,
         profiler=_build_profiler(cfg),
         callbacks=[
             pl.callbacks.ModelCheckpoint(
+                dirpath=str(ckpt_dir),
                 monitor=monitor_metric,
                 mode="min",
                 save_top_k=3,

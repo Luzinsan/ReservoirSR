@@ -1,6 +1,13 @@
 # @package _global_
 #
-# Experiment: SRGAN-like training with MSRResNet generator.
+# Experiment: SRGAN-style с MSRResNet генератором.
+# Двухфазный пайплайн:
+#   1) обучить srresnet_baseline (PSNR pretrain, L1)
+#   2) запустить этот эксперимент с resume_generator_from=epoch=099.ckpt
+#
+# Запуск:
+#   reservoir-sr-train +experiment=gan_srresnet \
+#     model.resume_generator_from=/path/to/srresnet_baseline/epoch=099.ckpt
 
 defaults:
   - override /task: gan
@@ -12,5 +19,8 @@ globals:
   experiment_name: gan_srresnet
 
 trainer:
-  max_epochs: 150
-  gradient_clip_val: 1.0
+  max_epochs: 80
+  # gradient_clip_val игнорируется для GAN (передаётся как None в Trainer).
+  # Реальный клиппинг — через model.grad_clip_val, см. gan_module.py.
+  gradient_clip_val: null
+  check_val_every_n_epoch: 2
