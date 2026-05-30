@@ -86,6 +86,24 @@ class SrLitModule(pl.LightningModule):
     def test_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> None:
         self._eval_step(batch, self.test_metrics, self.test_heavy, "test")
 
+    def on_validation_epoch_end(self) -> None:
+        self._flush_metrics(self.val_metrics, self.val_heavy)
+
+    def on_test_epoch_end(self) -> None:
+        self._flush_metrics(self.test_metrics, self.test_heavy)
+
+    def _flush_metrics(self, light: MetricCollection, heavy: MetricCollection) -> None:
+        """Compute, log and reset metrics; release GPU cache."""
+        sd = {"sync_dist": True}
+        for k, v in light.compute().items():
+            self.log(k, v, **sd)
+        for k, v in heavy.compute().items():
+            self.log(k, v, prog_bar=k.endswith("/ssim"), **sd)
+        light.reset()
+        heavy.reset()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def _eval_step(
         self,
         batch: dict[str, torch.Tensor],
@@ -99,12 +117,6 @@ class SrLitModule(pl.LightningModule):
 
         self.log(f"{prefix}/loss", self.loss_fn(pred, target), prog_bar=True, **sd)
 
-        for k, v in light(pred, target).items():
-            self.log(k, v, **sd)
-
-        for k, v in heavy(pred, target).items():
-            self.log(k, v, prog_bar=k.endswith("/ssim"), **sd)
-
         for c in range(pred.shape[1]):
             ch = CHANNEL_NAMES[c] if c < len(CHANNEL_NAMES) else f"ch{c}"
             p, t = pred[:, c : c + 1], target[:, c : c + 1]
@@ -114,6 +126,9 @@ class SrLitModule(pl.LightningModule):
         self.log(f"{prefix}_psnr/mean", _psnr(pred, target), prog_bar=True, **sd)
         self.log(f"{prefix}_physics/max_ae", (pred - target).abs().max(), **sd)
         self.log(f"{prefix}_physics/grad_mae", _gradient_mae(pred, target), **sd)
+
+        light.update(pred, target)
+        heavy.update(pred, target)
 
     def configure_optimizers(self):
         optimizer = instantiate(

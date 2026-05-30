@@ -1,14 +1,12 @@
 # @package _global_
-#
-# Experiment: lightweight MSRResNet baseline.
-
 defaults:
-  - override /model: srresnet
+  - override /model: rfdn
   - override /trainer: default
   - override /data/condition: none
 
 globals:
-  experiment_name: srresnet_baseline
+  experiment_name: rfdn_baseline
+
 
 model:
   optimizer:

@@ -6,10 +6,14 @@ experiment_name: default
 resume_from: null
 
 mlflow:
-  tracking_uri: http://127.0.0.1:5000
+  tracking_uri: http://127.0.0.1:5001
   experiment_name: ${globals.experiment_name}
   run_name: ${globals.experiment_name}
   save_dir: ${globals.artifacts_dir}/mlflow/artifacts
   log_model: false
+
+csv:
+  save_dir: ${globals.artifacts_dir}/csv
+  report_path: ${globals.artifacts_dir}/reports/experiments_report.csv
 
 profiler: null

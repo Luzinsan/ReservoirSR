@@ -1,6 +1,6 @@
 # ==========================================================================
-# GAN config: MSRResNet generator + SRGAN-style discriminator.
-# Relativistic average GAN (RaGAN) + VGG perceptual loss + label smoothing.
+# GAN config: MSRResNet generator + Residual PatchGAN discriminator.
+# Физический perceptual: Sobel + spectral L1
 # ==========================================================================
 
 generator:
@@ -13,65 +13,67 @@ generator:
   res_scale: 0.1
 
 discriminator:
-  _target_: reservoir_sr.ml.models.discriminators.SRResNetDiscriminator
+  _target_: reservoir_sr.ml.models.discriminators.ResidualFieldDiscriminator
   in_channels: 3
   base_channels: 64
+  n_layers: 3
 
 pixel_loss:
   _target_: torch.nn.L1Loss
 
 perceptual_loss:
-  _target_: reservoir_sr.ml.training.gan_module.VGGPerceptualLoss
-  in_channels: 3
+  _target_: reservoir_sr.ml.training.gan_module.PhysicsPerceptualLoss
+  grad_weight: 1.0
+  spectral_weight: 0.5
 
 adv_loss:
   _target_: torch.nn.BCEWithLogitsLoss
 
-# Баланс лоссов — pixel доминирует (для физических полей это критично)
+# ── Loss weights ─────────────────────────────────────
 pixel_weight: 10.0
 perc_weight: 1.0
-adv_weight: 0.005
+adv_weight: 0.01
 
-# Relativistic average GAN
-use_ragan: true
-
-# Label smoothing
-real_label: 0.9
-fake_label: 0.0
-
-# D/G steps per iteration
+# ── Training schedule ────────────────────────────────
+d_warmup_epochs: 10         # D учится один на фрозен-G
+warmup_epochs: 20           # G учится без adv (pixel + perc)
 d_steps: 1
 g_steps: 1
 
-# Warmup: первые N эпох только pixel+perceptual (D стоит)
-# Полезно, если стартуем не с pretrain-чекпоинта
-warmup_epochs: 0
+# ── D stabilization ──────────────────────────────────
+d_input_noise_std: 0.02
+d_input_noise_decay_epochs: 30
+d_skip_threshold: 0.4       # пропуск D-шага если он слишком уверен
 
-# Manual gradient clipping (Trainer-level отключён для GAN)
+# ── Loss variants ────────────────────────────────────
+use_ragan: true
+real_label: 0.9
+fake_label: 0.0
+
+# ── Stability ────────────────────────────────────────
 grad_clip_val: 1.0
+ema_decay: 0.999            # EMA генератора для стабильной валидации
 
-# Путь к чекпоинту srresnet_baseline для hot-start генератора.
-# ОБЯЗАТЕЛЬНО укажите после первого прогона srresnet_baseline.
-resume_generator_from: './4/53e01ed75ac846d29ad37d43c4ab41ea/checkpoints/epoch=099.ckpt'
+# ── Pretrain ─────────────────────────────────────────
+resume_generator_from: /mnt/home/ReservoirSR/artifacts/checkpoints/best/srresnet_generator.ckpt
 
+# ── Optimizers (TTUR: D быстрее G) ───────────────────
 g_optimizer:
   _target_: torch.optim.Adam
-  lr: 0.0001
+  lr: 5.0e-5
   betas: [0.9, 0.99]
-  weight_decay: 0.0
 
 d_optimizer:
   _target_: torch.optim.Adam
-  lr: 0.00005              # D медленнее G — не даём ему доминировать
+  lr: 2.0e-4
   betas: [0.9, 0.99]
-  weight_decay: 0.0
 
 g_scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   T_max: ${trainer.max_epochs}
-  eta_min: 0.000001
+  eta_min: 1.0e-6
 
 d_scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   T_max: ${trainer.max_epochs}
-  eta_min: 0.000001
+  eta_min: 1.0e-6

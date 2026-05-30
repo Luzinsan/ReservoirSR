@@ -1,15 +1,15 @@
 # @package _global_
 defaults:
-  - override /model: gan_srresnet
+  - override /model: gan_rfdn
   - override /trainer: default
   - override /data/condition: none
 
 task: gan
 
 globals:
-  experiment_name: gan_srresnet
+  experiment_name: gan_rfdn
 
 trainer:
-  max_epochs: 100
+  max_epochs: 80
   gradient_clip_val: null
   check_val_every_n_epoch: 2
