@@ -94,6 +94,68 @@ class PhysicsPerceptualLoss(nn.Module):
         if self.spectral_weight > 0:
             loss = loss + self.spectral_weight * self._spectral_l1(pred, target).to(loss.dtype)
         return loss
+    
+
+class ReservoirPhysicsLoss(nn.Module):
+    """Physics-loss для трещиновато-пористого пласта."""
+
+    def __init__(
+        self,
+        p_smoothness_weight: float = 1.0,
+        edge_consistency_weight: float = 1.0,
+    ):
+        super().__init__()
+        self.p_smoothness_weight = p_smoothness_weight
+        self.edge_consistency_weight = edge_consistency_weight
+
+        # Лапласиан 5-точечный для проверки гладкости давления
+        laplacian = torch.tensor(
+            [[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=torch.float32
+        ).view(1, 1, 3, 3)
+        # Sobel для определения положения фронтов на насыщенностях
+        sobel_x = torch.tensor(
+            [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32
+        ).view(1, 1, 3, 3) / 8.0
+        sobel_y = torch.tensor(
+            [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32
+        ).view(1, 1, 3, 3) / 8.0
+        
+        self.register_buffer("laplacian", laplacian)
+        self.register_buffer("sobel_x", sobel_x)
+        self.register_buffer("sobel_y", sobel_y)
+
+    def _pressure_smoothness_loss(self, pred: torch.Tensor) -> torch.Tensor:
+        """∇²P должно быть малым: давление физически гладкое."""
+        p = pred[:, 0:1]
+        lap = F.conv2d(p, self.laplacian, padding=1)
+        return lap.abs().mean()
+
+    def _edge_consistency_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """Согласованность фронтов насыщенностей между pred и target."""
+        sx, sy = self.sobel_x, self.sobel_y
+        # Берём только насыщенности (channels 1, 2)
+        s_pred = pred[:, 1:3]
+        s_target = target[:, 1:3]
+        
+        loss = 0.0
+        for c in range(2):
+            p_ch = s_pred[:, c:c+1]
+            t_ch = s_target[:, c:c+1]
+            # Магнитуда градиента — где сильный фронт
+            gx_p = F.conv2d(p_ch, sx, padding=1)
+            gy_p = F.conv2d(p_ch, sy, padding=1)
+            gx_t = F.conv2d(t_ch, sx, padding=1)
+            gy_t = F.conv2d(t_ch, sy, padding=1)
+            mag_p = torch.sqrt(gx_p**2 + gy_p**2 + 1e-8)
+            mag_t = torch.sqrt(gx_t**2 + gy_t**2 + 1e-8)
+            loss = loss + (mag_p - mag_t).abs().mean()
+        
+        return loss * 0.5
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        loss = self.p_smoothness_weight * self._pressure_smoothness_loss(pred)
+        loss = loss + self.edge_consistency_weight * self._edge_consistency_loss(pred, target)
+        return loss
 
 
 # ============================================================================
@@ -128,6 +190,10 @@ class GanLitModule(pl.LightningModule):
         self.perceptual_loss: nn.Module | None = (
             instantiate(m.perceptual_loss) if m.get("perceptual_loss") is not None else None
         )
+        self.physics_loss = (
+            instantiate(m.physics_loss) if m.get("physics_loss") is not None else None
+        )
+        self.physics_weight = float(m.get("physics_weight", 0.0))
         self.model = self.generator  # для совместимости с visualization callback
 
         # ── Loss weights ───────────────────────────────────────
@@ -146,6 +212,7 @@ class GanLitModule(pl.LightningModule):
         self.d_input_noise_decay_epochs = int(m.get("d_input_noise_decay_epochs", 30))
         self.d_skip_threshold = float(m.get("d_skip_threshold", 0.0))  # 0 = выкл, 0.4 рекомендуется
         self._last_d_loss: float | None = None
+        self.d_refresh_every = int(m.get("d_refresh_every", 5))
 
         # ── Loss variants ──────────────────────────────────────
         self.use_ragan = bool(m.get("use_ragan", True))
@@ -214,7 +281,7 @@ class GanLitModule(pl.LightningModule):
         return self.adv_loss(logits_fake, real_t)
 
     # ------------------------------------------------------------------
-    # Training step — высокоуровневая декомпозиция
+    # Training step
     # ------------------------------------------------------------------
 
     def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> None:
@@ -280,11 +347,15 @@ class GanLitModule(pl.LightningModule):
         }
 
     def _should_skip_d(self) -> bool:
-        return (
-            self.d_skip_threshold > 0
-            and self._last_d_loss is not None
-            and self._last_d_loss < self.d_skip_threshold
-        )
+        if self.d_skip_threshold <= 0 or self._last_d_loss is None:
+            return False
+        if (
+            self.d_refresh_every > 0
+            and self.current_epoch > 0
+            and self.current_epoch % self.d_refresh_every == 0
+        ):
+            return False
+        return self._last_d_loss < self.d_skip_threshold
 
     @staticmethod
     def _inject_noise(
@@ -314,6 +385,11 @@ class GanLitModule(pl.LightningModule):
             if self.perceptual_loss is not None and self.perc_weight > 0
             else torch.zeros((), device=fake.device, dtype=fake.dtype)
         )
+        g_physics = (
+            self.physics_loss(fake, batch["hr"])
+            if self.physics_loss is not None and self.physics_weight > 0
+            else torch.zeros((), device=fake.device, dtype=fake.dtype)
+        )
 
         if in_g_warmup:
             g_adv = torch.zeros((), device=fake.device, dtype=fake.dtype)
@@ -325,6 +401,7 @@ class GanLitModule(pl.LightningModule):
         g_total = (
             self.pixel_weight * g_pixel
             + self.perc_weight * g_perc
+            + self.physics_weight * g_physics
             + self.adv_weight * g_adv
         )
 
@@ -338,6 +415,7 @@ class GanLitModule(pl.LightningModule):
             "g_total": g_total.detach(),
             "g_pixel": g_pixel.detach(),
             "g_perc": g_perc.detach(),
+            "g_physics": g_physics.detach(),
             "g_adv": g_adv.detach(),
         }
 
@@ -363,6 +441,7 @@ class GanLitModule(pl.LightningModule):
         self.log("train/g_total", g_stats["g_total"], prog_bar=True)
         self.log("train/g_pixel", g_stats["g_pixel"])
         self.log("train/g_perc", g_stats["g_perc"])
+        self.log("train/g_physics", g_stats["g_physics"])
         self.log("train/g_adv", g_stats["g_adv"])
 
     # ------------------------------------------------------------------
@@ -401,11 +480,18 @@ class GanLitModule(pl.LightningModule):
             if self.perceptual_loss is not None and self.perc_weight > 0
             else torch.zeros((), device=pred.device)
         )
+        val_physics = (
+            self.physics_loss(pred, target)
+            if self.physics_loss is not None and self.physics_weight > 0
+            else torch.zeros((), device=pred.device)
+        )
+        
         g_total = self.pixel_weight * val_pixel + self.perc_weight * val_perc
 
         self.log("val/loss", val_pixel, prog_bar=True, **sd)
         self.log("val/g_total", g_total, prog_bar=True, **sd)
         self.log("val/g_perc", val_perc, **sd)
+        self.log("val/g_physics", val_physics, **sd)
 
         self.val_metrics.update(pred, target)
         self.val_heavy.update(pred, target)
@@ -456,4 +542,4 @@ def _scheduler_dict(scheduler):
 def _zero_g_stats(device: torch.device) -> dict[str, torch.Tensor]:
     """Нулевые G-метрики для unified логирования во время D-warmup."""
     z = torch.zeros((), device=device)
-    return {"g_total": z, "g_pixel": z, "g_perc": z, "g_adv": z}
+    return {"g_total": z, "g_pixel": z, "g_perc": z, "g_physics": z, "g_adv": z}

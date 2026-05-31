@@ -26,24 +26,31 @@ perceptual_loss:
   grad_weight: 1.0
   spectral_weight: 0.5
 
+physics_loss:
+  _target_: reservoir_sr.ml.training.gan_module.ReservoirPhysicsLoss
+  p_smoothness_weight: 0.2
+  edge_consistency_weight: 1.5
+
 adv_loss:
   _target_: torch.nn.BCEWithLogitsLoss
 
 # ── Loss weights ─────────────────────────────────────
-pixel_weight: 10.0
-perc_weight: 1.0
-adv_weight: 0.01
+pixel_weight: 2.0
+perc_weight: 0.5
+physics_weight: 0.3
+adv_weight: 0.03
 
 # ── Training schedule ────────────────────────────────
-d_warmup_epochs: 10         # D учится один на фрозен-G
-warmup_epochs: 20           # G учится без adv (pixel + perc)
+d_warmup_epochs: 5
+warmup_epochs: 10
 d_steps: 1
 g_steps: 1
 
 # ── D stabilization ──────────────────────────────────
 d_input_noise_std: 0.02
 d_input_noise_decay_epochs: 30
-d_skip_threshold: 0.4       # пропуск D-шага если он слишком уверен
+d_skip_threshold: 0.35
+d_refresh_every: 5
 
 # ── Loss variants ────────────────────────────────────
 use_ragan: true
@@ -52,12 +59,12 @@ fake_label: 0.0
 
 # ── Stability ────────────────────────────────────────
 grad_clip_val: 1.0
-ema_decay: 0.999            # EMA генератора для стабильной валидации
+ema_decay: 0.995
 
 # ── Pretrain ─────────────────────────────────────────
 resume_generator_from: /mnt/home/ReservoirSR/artifacts/checkpoints/best/srresnet_generator.ckpt
 
-# ── Optimizers (TTUR: D быстрее G) ───────────────────
+# ── Optimizers ─────────────────────────────────────────────
 g_optimizer:
   _target_: torch.optim.Adam
   lr: 5.0e-5

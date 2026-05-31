@@ -12,4 +12,4 @@ globals:
 trainer:
   max_epochs: 100
   gradient_clip_val: null
-  check_val_every_n_epoch: 2
+  check_val_every_n_epoch: 1

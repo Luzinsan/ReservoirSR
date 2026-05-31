@@ -27,6 +27,7 @@ import hydra
 import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import (
+    EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
     TQDMProgressBar,
@@ -87,7 +88,7 @@ def _build_lit_module(cfg: DictConfig) -> tuple[pl.LightningModule, str, str]:
     """
     if cfg.task == "gan":
         return GanLitModule(cfg), "val_structural/ssim", "max"
-    return SrLitModule(cfg), "val/loss", "min"
+    return SrLitModule(cfg), "val_psnr/mean", "max"
 
 
 # ============================================================================
@@ -149,13 +150,17 @@ def _build_callbacks(
     monitor_mode: str,
     report_path: Path,
 ) -> list:
-    return [
+    if cfg.task == "gan":
+        filename = "epoch={epoch:03d}-ssim={val_structural/ssim:.4f}"
+    else:
+        filename = "epoch={epoch:03d}-psnr={val_psnr/mean:.2f}"
+    callbacks = [
         ModelCheckpoint(
             dirpath=str(ckpt_dir),
             monitor=monitor_metric,
             mode=monitor_mode,
             save_top_k=3,
-            filename="epoch={epoch:03d}",
+            filename=filename,
             auto_insert_metric_name=False,
         ),
         LearningRateMonitor(logging_interval="epoch"),
@@ -163,6 +168,21 @@ def _build_callbacks(
         SrVisualizationCallback(n_samples=cfg.trainer.vis_n_samples),
         ExperimentReportCallback(cfg=cfg, report_path=report_path),
     ]
+
+    # Early stopping для GAN: следим за SSIM
+    if cfg.task == "gan":
+        callbacks.append(
+            EarlyStopping(
+                monitor=monitor_metric,
+                mode=monitor_mode,
+                patience=50,
+                min_delta=0.003,
+                verbose=True,
+                check_finite=True,
+            )
+        )
+
+    return callbacks
 
 
 # ============================================================================
