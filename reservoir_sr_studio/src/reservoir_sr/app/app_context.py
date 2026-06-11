@@ -15,7 +15,7 @@ from reservoir_sr.common.observable import ObservableModel
 class AppModuleTab(IntEnum):
     DATA = 0
     TRAINING = 1
-    INFERENCE = 2
+    EVALUATION = 2
 
 
 @dataclass

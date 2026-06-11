@@ -8,7 +8,7 @@ from reservoir_sr.app.app_context import AppContext, AppModuleTab
 from reservoir_sr.app.module_protocol import ModuleProtocol
 from reservoir_sr.app.settings_dialog import SettingsDialog
 from reservoir_sr.common.logging import EventLogger, LogPanel
-from reservoir_sr.features.inference.presentation.inference_module import InferenceModule
+from reservoir_sr.features.evaluation.presentation.evaluation_module import EvaluationModule
 from reservoir_sr.features.simulation.presentation.controllers.data_tab_controller import DataTabController
 from reservoir_sr.features.simulation.presentation.panels.data_tab_panel import DataTabPanel
 from reservoir_sr.features.training.presentation.training_module import TrainingModule
@@ -65,7 +65,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._add_module(self.data_tab_controller, "Data")
 
         self._add_module(TrainingModule(context=self.context), "Training")
-        self._add_module(InferenceModule(context=self.context), "Inference")
+        self._add_module(EvaluationModule(context=self.context), "Evaluation")
 
     def _add_module(self, module: ModuleProtocol, label: str) -> None:
         self._modules.append(module)
@@ -158,8 +158,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _append_log(self, html: str) -> None:
         self.log_output.append_html(html)
-
-    # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         for module in self._modules:

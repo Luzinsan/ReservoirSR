@@ -17,7 +17,13 @@ class MapsPanel(QtWidgets.QWidget):
         self.render_mode_combo = QtWidgets.QComboBox()
         self.render_mode_combo.addItem("Упрощенная", "simple")
         self.render_mode_combo.addItem("Сглаженная", "smooth")
+        self.render_mode_combo.addItem("SR (нейросеть)", "sr")
         top_row.addWidget(self.render_mode_combo)
+        top_row.addWidget(QtWidgets.QLabel("SR-модель:"))
+        self.sr_model_combo = QtWidgets.QComboBox()
+        self.sr_model_combo.setMinimumWidth(220)
+        self.sr_model_combo.setEnabled(False)
+        top_row.addWidget(self.sr_model_combo)
         layout.addLayout(top_row)
 
         body = QtWidgets.QHBoxLayout()

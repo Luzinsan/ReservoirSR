@@ -53,7 +53,6 @@ class RuntimeSessionState(ObservableModel):
     mu_pazp: float = 8.0
 
     def build_config(self, base: SimulationConfig) -> SimulationConfig:
-        """Применяет промысловые переопределения к базовой конфигурации."""
         from dataclasses import replace
 
         return replace(
@@ -107,6 +106,7 @@ class RenderViewState(ObservableModel):
     current_field: str = "ST"
     render_mode: str = "smooth"
     scene_dims: tuple[float, float] = (1.0, 1.0)
+    sr_model_path: Path | None = None
 
 
 @dataclass

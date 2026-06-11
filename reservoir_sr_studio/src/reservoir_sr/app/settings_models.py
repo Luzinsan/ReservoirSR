@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from reservoir_sr.common.observable import ObservableModel
 
@@ -43,8 +44,16 @@ class TrainingModuleSettings(ObservableModel):
 class InferenceModuleSettings(ObservableModel):
     default_device: str = "auto"
     default_model_dir: str = ""
+    extra_model_paths: tuple[str, ...] = ()
     default_input_dir: str = ""
     default_output_dir: str = ""
+    default_stats_path: str = ""
     default_batch_size: int = 1
     cache_results: bool = True
 
+    def available_models(self) -> list[Path]:
+        models: list[Path] = []
+        if self.default_model_dir:
+            models.extend(sorted(Path(self.default_model_dir).rglob("*.onnx")))
+        models.extend(Path(p) for p in self.extra_model_paths)
+        return models

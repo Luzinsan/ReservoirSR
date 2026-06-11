@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 
 import numpy as np
 
@@ -49,7 +49,7 @@ class SimulationFields:
     data: dict[str, FieldGrid]
 
 
-class DatasetJobState(StrEnum):
+class DatasetJobState(Enum):
     PENDING = "pending"
     RUNNING = "running"
     PAUSED = "paused"
