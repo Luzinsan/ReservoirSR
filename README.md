@@ -1,177 +1,95 @@
-# Reservoir SR
+# Reservoir SR Studio
 
-Платформа супер-разрешения трещиновато-пористых нефтяных коллекторов на базе .NET-симулятора и PyTorch-моделей.
+Desktop-приложение для **Super-Resolution** карт давления и насыщенности в задачах моделирования нефтяных пластов. Включает runtime-симулятор, инструменты генерации датасетов, обучение нейросетей (вынесено в отдельный CLI) и валидацию обученных моделей.
 
-## Содержание
+## Демонстрация
 
-- [Требования](#требования)
-- [Структура](#структура)
-- [Установка](#установка)
-- [Запуск](#запуск)
-- [Конфигурация](#конфигурация)
-- [Типовые сценарии](#типовые-сценарии)
+### Runtime-симуляция с восстановлением через SR-модели
+Карты низкого разрешения, генерируемые симулятором в реальном времени, апскейлятся обученной нейросетью на лету.
 
-## Требования
+<video src="demo/runtime_simulator_demo.mp4" controls width="100%"></video>
 
-- **.NET SDK 8.0**
-- **Python 3.10+**
-- **CUDA 12.1** (опционально, для обучения на GPU)
-- Linux x64
+### Валидация модели на тестовом архиве
+Покадровое сравнение `LR / SR / HR / |HR-SR|` по трём каналам (`P`, `ST`, `SB`).
 
-## Структура
+<video src="demo/models_validation_demo.mp4" controls width="100%"></video>
 
-| Каталог | Назначение |
-|---|---|
-| `simulator/` | .NET-симулятор фильтрации (gRPC-сервер) |
-| `reservoir_sr_studio/` | Python-приложение: GUI, обучение, инференс |
-| `artifacts/` | Чекпоинты, статистика, экспортированные ONNX |
+---
+
+## Возможности
+
+- **Data tab** — запуск симуляции пласта, просмотр карт и метрик, генерация датасетов в формате `.npz`.
+- **Evaluation tab** — сравнение SR-моделей (ONNX) на архивах по всем timestep'ам.
+- **CLI** — обучение и экспорт моделей в ONNX через Hydra-конфиги.
 
 ## Установка
 
-### Симулятор
-
 ```bash
-dotnet build simulator/Simulation.Server/Simulation.Server.csproj -c Release
-```
-
-### Python-окружение
-
-```bash
-# базовая установка (UI + gRPC-клиент)
-pip install -e reservoir_sr_studio
-
-# с ML-зависимостями (torch, lightning, hydra, mlflow, torchmetrics, onnx*)
-pip install -e "reservoir_sr_studio[ml]"
-
-# с dev-инструментами (pytest, ruff, grpcio-tools)
-pip install -e "reservoir_sr_studio[dev]"
-```
-
-### Генерация gRPC-стабов
-
-После установки в editable-режиме доступна консольная команда:
-
-```bash
-reservoir-sr-generate-proto
-```
-
-Она генерирует `simulation_pb2.py` и `simulation_pb2_grpc.py` в `reservoir_sr_studio/src/reservoir_sr/infrastructure/grpc/generated/` из `simulator/Simulation.Contracts/Protos/simulation.proto`. Требуется группа `[dev]` (`grpcio-tools`).
-
-## Запуск
-
-Все компоненты запускаются независимо. Минимальный сценарий — только GUI; симулятор нужен для генерации данных и runtime-режима.
-
-### 1. gRPC-сервер симулятора
-
-Слушает порт `5000` (HTTP/2).
-
-```bash
-dotnet run --project simulator/Simulation.Server -c Release
-```
-
-В фоне:
-
-```bash
-nohup dotnet run -c Release > server.log 2>&1 &
-```
-
-### 2. Доступные консольные команды
-
-После `pip install -e .`:
-
-- `reservoir-sr-studio` — десктоп-приложение (PySide6)
-- `reservoir-sr-build-dataset` — сборка датасета
-- `reservoir-sr-generate-proto` — генерация gRPC-стабов
-- `reservoir-sr-train` — обучение SR/GAN-моделей через Hydra
-
-По умолчанию клиент ходит на gRPC-сервер по адресу `localhost:5000`; изменить можно в настройках UI (Settings → General → gRPC endpoint) либо флагом `--endpoint` в `generate_campaign.py`.
-
-
-### 3. MLflow UI
-
-```bash
-mlflow ui --host 127.0.0.1 --port 5001
-```
-
-Tracking URI берётся из `conf/globals/default.yaml` (по умолчанию `http://127.0.0.1:5001`).
-
-
-
-### 4. Обучение модели (CLI)
-
-```bash
+git clone <repo-url>
 cd reservoir_sr_studio
-python -m reservoir_sr.tools.train +experiment=srresnet_baseline
+uv sync           # или: poetry install
 ```
 
-Доступные эксперименты: `srresnet_baseline`, `mdsr_baseline`, `mdsr_conditioned`, `rfdn`, `gan_srresnet`, `gan_rfdn`, `gan_mdsr`.
+Требования: **Python 3.10.12**, PySide6, PyTorch ≥ 2.11, ONNX Runtime.
 
-### 5. Экспорт чекпоинтов в ONNX
+## Запуск GUI
 
 ```bash
-cd reservoir_sr_studio
+uv run reservoir-sr-studio
+```
+
+При первом запуске откройте `Settings` и укажите пути:
+- **Data** — путь к JSON-конфигу симуляции
+- **Inference** — папка с ONNX-моделями, файл статистики, входная папка с архивами
+
+## Обучение моделей (CLI)
+
+Конфигурация через Hydra (см. `src/reservoir_sr/conf/`):
+
+```bash
+# mdsr архитектура
+python -m reservoir_sr.tools.train +experiment=mdsr_baseline
+
+
+# GAN-вариант
+python -m reservoir_sr.tools.train +experiment=gan_srresnet
+```
+
+Доступные эксперименты: `mdsr_baseline`, `mdsr_conditioned`, `rfdn`, `srresnet_baseline`, `gan_mdsr`, `gan_rfdn`, `gan_srresnet`.
+
+Все логи и чекпойнты — в `${artifacts_dir}` (по умолчанию `/mnt/home/ReservoirSR/artifacts`), метрики — в MLflow (`http://127.0.0.1:5001`).
+
+## Экспорт в ONNX
+
+```bash
 python -m reservoir_sr.tools.export
 ```
 
-Параметры берутся из `conf/export.yaml`. Возможны два режима:
+Параметры (входной чекпойнт, выходной путь, EMA-веса) — в `conf/export.yaml`.
 
-- **Пакетный** — `source_dir` + `destination_dir`: все `.ckpt` из папки экспортируются в `destination_dir/<basename(source_dir)>/`.
-- **Одиночный** — `source_checkpoint` + `output_path`.
+## Структура конфигов
 
-Переопределение из CLI:
-
-```bash
-python -m reservoir_sr.tools.export \
-  source_dir=/path/to/checkpoints \
-  destination_dir=/path/to/onnx
+```
+src/reservoir_sr/conf/
+├── train.yaml              # корневой конфиг обучения
+├── export.yaml             # экспорт в ONNX
+├── data/                   # источник данных, condition, нормализация
+├── model/                  # mdsr, rfdn, srresnet + optimizer/scheduler/loss
+├── gan/                    # GAN-конфиги (generator + discriminator)
+├── experiment/             # готовые сценарии запуска
+├── trainer/                # параметры Lightning Trainer
+└── gui/                    # настройки GUI (general, data, inference)
 ```
 
-## GUI
+## Архитектура моделей
 
-Вкладки:
+- **MDSR** — multi-scale residual SR с опциональным FiLM-кондиционированием на 131-мерном векторе физических параметров (динамика + статика + слои пласта).
+- **RFDN** — лёгкая residual feature distillation network.
+- **MSRResNet** — компактный SRResNet-генератор для GAN-режима.
+- **GAN-варианты** — те же генераторы + Residual PatchGAN дискриминатор + физический perceptual loss (Sobel + spectral L1).
 
-- **Data** — runtime-симуляция, генерация датасета, просмотр архивов
-- **Evaluation** — сравнение SR-модели с эталоном HR на готовых архивах
+Все модели работают со scale=4 и тремя каналами (`P`, `ST`, `SB`).
 
-Перед использованием Evaluation и SR-overlay укажите в **Settings → Inference**:
+## Лицензия
 
-- **Default model dir** — папка с экспортированными `.onnx`
-- **Stats file (JSON)** — путь к `stats.json` (по нему была обучена модель)
-
-## Типовые сценарии
-
-### Сгенерировать датасет
-
-1. Запустить gRPC-сервер.
-2. Открыть GUI → **Data** → **Simulation generation**.
-3. Указать `Output dir`, `Steps`, `LR NX`, `HR NX`.
-4. Выбрать режим (`Single` / `Campaign`) и нажать **Start**.
-
-Архивы сохраняются как `<job_id>.npz` в указанной папке.
-
-### Обучить модель
-
-```bash
-python -m reservoir_sr.tools.train +experiment=srresnet_baseline
-```
-
-Чекпоинты: `artifacts/checkpoints/<experiment>/`.
-Метрики: MLflow UI.
-
-### Экспортировать обученную модель
-
-```bash
-python -m reservoir_sr.tools.export \
-  source_dir=artifacts/checkpoints/srresnet_baseline \
-  destination_dir=artifacts/checkpoints/export
-```
-
-### Оценить модель в GUI
-
-1. Settings → Inference → указать `Default model dir` и `Stats file`.
-2. GUI → вкладка **Evaluation** → выбрать модель, сплит, архив.
-
-### Просмотр SR-апскейла во время runtime-симуляции
-
-1. GUI → **Data** → **Runtime** → запустить симуляцию.
-2. В правой панели **Maps** выбрать `Режим карты: SR (нейросеть)` и указать модель в combo `SR-модель`.
+Внутренний проект.
