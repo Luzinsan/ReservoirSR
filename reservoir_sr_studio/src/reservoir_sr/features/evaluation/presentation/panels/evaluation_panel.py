@@ -20,32 +20,55 @@ class EvaluationPanel(QtWidgets.QWidget):
 
         # ── Left column: controls ────────────────────────────
         left = QtWidgets.QWidget()
-        left.setMinimumWidth(360)
-        left.setMaximumWidth(440)
+        left.setMinimumWidth(420)
+        left.setMaximumWidth(560)
         left_layout = QtWidgets.QVBoxLayout(left)
 
         controls = QtWidgets.QGroupBox("Evaluation controls")
         form = QtWidgets.QFormLayout(controls)
+        # На Mac QFormLayout по умолчанию НЕ растягивает field под ширину строки.
+        # Принудительно включаем growing-режим, иначе слайдер сжимается к sizeHint.
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.DontWrapRows)
+        form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form.setFormAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         self.model_combo = QtWidgets.QComboBox()
-        self.model_combo.setMinimumWidth(260)
+        self.model_combo.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         form.addRow("Model", self.model_combo)
 
         self.split_combo = QtWidgets.QComboBox()
         for s in ("train", "val", "test"):
             self.split_combo.addItem(s, s)
         self.split_combo.setCurrentIndex(2)
+        self.split_combo.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         form.addRow("Split", self.split_combo)
 
         self.archive_combo = QtWidgets.QComboBox()
-        self.archive_combo.setMinimumWidth(260)
+        self.archive_combo.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         form.addRow("Archive", self.archive_combo)
 
         self.step_label = QtWidgets.QLabel("Step: 0/0")
+        form.addRow("Current step", self.step_label)
+
         self.step_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.step_slider.setRange(0, 0)
         self.step_slider.setEnabled(False)
-        form.addRow("Current step", self.step_label)
+        # Critical для Mac: без MinimumExpanding слайдер сожмётся.
+        self.step_slider.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        self.step_slider.setMinimumWidth(280)
         form.addRow("Timeline", self.step_slider)
 
         left_layout.addWidget(controls)

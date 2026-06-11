@@ -1,0 +1,8 @@
+# @package data
+palette_name: geographical
+show_legend: true
+live_render: true
+isoline_layer_mode: 'off'
+isoline_width: 2
+isoline_level_stride: 1
+simulation_config_path: /Users/a.luzinsan/Downloads/ReservoirSR/artifacts/gui_config.json

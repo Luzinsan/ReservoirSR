@@ -1,0 +1,9 @@
+# @package inference
+device: cuda
+model_dir: /Users/a.luzinsan/Downloads/ReservoirSR/artifacts/checkpoints/export
+extra_model_paths: []
+preferred_model: gan_srresnet_e92.onnx
+stats_path: /Users/a.luzinsan/Downloads/ReservoirSR/artifacts/stats/stats.json
+input_dir: /Users/a.luzinsan/Downloads/ReservoirSR/datasets
+batch_size: 1
+cache_results: true

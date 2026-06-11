@@ -1,0 +1,4 @@
+# @package general
+endpoint: localhost:5000
+project_directory: ''
+log_level: debug
