@@ -131,17 +131,12 @@ python -m reservoir_sr.tools.export \
 Вкладки:
 
 - **Data** — runtime-симуляция, генерация датасета, просмотр архивов
-- **Training** — заглушка (обучение запускается из CLI)
 - **Evaluation** — сравнение SR-модели с эталоном HR на готовых архивах
 
 Перед использованием Evaluation и SR-overlay укажите в **Settings → Inference**:
 
 - **Default model dir** — папка с экспортированными `.onnx`
 - **Stats file (JSON)** — путь к `stats.json` (по нему была обучена модель)
-
-И в **Settings → Training**:
-
-- **Default dataset dir** — папка с `.npz`-архивами симулятора
 
 ## Типовые сценарии
 
@@ -174,8 +169,7 @@ python -m reservoir_sr.tools.export \
 ### Оценить модель в GUI
 
 1. Settings → Inference → указать `Default model dir` и `Stats file`.
-2. Settings → Training → указать `Default dataset dir`.
-3. GUI → вкладка **Evaluation** → выбрать модель, сплит, архив.
+2. GUI → вкладка **Evaluation** → выбрать модель, сплит, архив.
 
 ### Просмотр SR-апскейла во время runtime-симуляции
 
