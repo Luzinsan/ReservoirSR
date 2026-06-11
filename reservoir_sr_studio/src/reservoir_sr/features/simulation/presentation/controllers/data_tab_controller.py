@@ -92,7 +92,11 @@ class DataTabController:
         DATA_TAB_BINDINGS = [
             ("active_tab", "mode_tabs", "index"),
         ]
+        DATA_SETTINGS_BINDINGS = [
+            ("simulation_config_path", "config_panel.path_edit", "text"),
+        ]
         autobind(self.tab_vm, self.panel.data_sources_panel, DATA_TAB_BINDINGS)
+        autobind(self.context.data, self.panel, DATA_SETTINGS_BINDINGS)
 
     def _bind_subscriptions(self) -> None:
         self.context.nav.subscribe(self.on_nav_changed)

@@ -10,6 +10,7 @@ from reservoir_sr.common.qt_binding import autobind
 from reservoir_sr.common.logging import EventLogger
 from reservoir_sr.domain.simulation.value_objects import FieldSnapshot
 from reservoir_sr.domain.training.normalization_stats import NormalizationStats
+from reservoir_sr.domain.training.norm_config import NormConfig
 from reservoir_sr.features.inference.application.sr_inference_engine import SrInferenceEngine
 from reservoir_sr.features.simulation.presentation.field_plot_renderer import FieldPlotRenderer
 from reservoir_sr.features.simulation.presentation.panels.maps_panel import MapsPanel
@@ -142,7 +143,7 @@ class MapRenderController:
     def _ensure_normalizer(self) -> Normalizer | None:
         if self._normalizer is not None:
             return self._normalizer
-        stats_path_str = self.inference_settings.default_stats_path.strip()
+        stats_path_str = self.inference_settings.stats_path.strip()
         if not stats_path_str:
             self.logger.warning("Stats file path not configured (Settings → Inference)")
             return None
@@ -155,7 +156,7 @@ class MapRenderController:
         except Exception as exc:
             self.logger.error("Failed to read stats", path=str(stats_path), detail=str(exc))
             return None
-        self._normalizer = Normalizer(stats, config={})
+        self._normalizer = Normalizer(stats, config={"norm": NormConfig()})
         return self._normalizer
 
     # ------------------------------------------------------------------
@@ -255,6 +256,8 @@ class MapRenderController:
 
     def _update_scene_layout(self) -> None:
         boundaries = self._snapshot.layer_boundaries if self._snapshot else None
+        if boundaries is not None and self._snapshot is not None:
+            boundaries = self._rescale_boundaries(boundaries)
         self.layer_lines, self.layer_labels = self.plot_controller.update_scene_layout(
             self.maps_widget.plot,
             scene_dims=self.state.scene_dims,
@@ -262,6 +265,16 @@ class MapRenderController:
             layer_lines=self.layer_lines,
             layer_labels=self.layer_labels,
         )
+
+    def _rescale_boundaries(self, boundaries: np.ndarray) -> np.ndarray:
+        arr = next(iter(self._snapshot.fields.values()), None)
+        if arr is None:
+            return boundaries
+        raw_nz = arr.shape[0]
+        _, scene_nz = self.state.scene_dims
+        if raw_nz <= 0 or abs(scene_nz - raw_nz) < 1e-9:
+            return boundaries
+        return boundaries * (scene_nz / raw_nz)
 
     # ------------------------------------------------------------------
     # State change handlers
@@ -294,12 +307,16 @@ class MapRenderController:
             self._render()
 
     def _on_inference_settings_changed(self, name: str, _value: object) -> None:
-        if name in ("default_model_dir", "extra_model_paths"):
+        if name in ("model_dir", "extra_model_paths"):
+            self.engine.unload()
+            self.state.sr_model_path = None
             self._refresh_sr_models()
-        elif name == "default_stats_path":
+        elif name == "stats_path":
             self._normalizer = None
             self.engine.unload()
             self.state.sr_model_path = None
+            if not self.inference_settings.stats_path.strip():
+                self.logger.error("Stats file cleared — SR disabled")
             self._refresh_sr_models()
 
     # ------------------------------------------------------------------
