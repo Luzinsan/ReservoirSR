@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6 import QtWidgets
 
 
 class ConfigPanel(QtWidgets.QGroupBox):
     def __init__(self) -> None:
-        super().__init__("Конфигурационный файл")
+        super().__init__("Configuration file")
         layout = QtWidgets.QVBoxLayout(self)
 
         path_layout = QtWidgets.QHBoxLayout()
-        self.path_edit = QtWidgets.QLineEdit(str(Path.cwd() / "gui_config.json"))
+        self.path_edit = QtWidgets.QLineEdit()
+        self.path_edit.setPlaceholderText("Path to simulation JSON config")
         browse_button = QtWidgets.QPushButton("...")
         browse_button.clicked.connect(self._on_browse)
         path_layout.addWidget(self.path_edit)

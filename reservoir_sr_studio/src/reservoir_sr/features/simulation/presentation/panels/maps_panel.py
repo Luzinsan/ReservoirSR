@@ -11,15 +11,15 @@ class MapsPanel(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
 
         top_row = QtWidgets.QHBoxLayout()
-        self.title_label = QtWidgets.QLabel("Распределение насыщенности ST")
+        self.title_label = QtWidgets.QLabel("ST saturation distribution")
         top_row.addWidget(self.title_label, stretch=1)
-        top_row.addWidget(QtWidgets.QLabel("Режим карты:"))
+        top_row.addWidget(QtWidgets.QLabel("Render mode:"))
         self.render_mode_combo = QtWidgets.QComboBox()
-        self.render_mode_combo.addItem("Упрощенная", "simple")
-        self.render_mode_combo.addItem("Сглаженная", "smooth")
-        self.render_mode_combo.addItem("SR (нейросеть)", "sr")
+        self.render_mode_combo.addItem("Simple", "simple")
+        self.render_mode_combo.addItem("Smooth", "smooth")
+        self.render_mode_combo.addItem("SR (neural)", "sr")
         top_row.addWidget(self.render_mode_combo)
-        top_row.addWidget(QtWidgets.QLabel("SR-модель:"))
+        top_row.addWidget(QtWidgets.QLabel("SR model:"))
         self.sr_model_combo = QtWidgets.QComboBox()
         self.sr_model_combo.setMinimumWidth(220)
         self.sr_model_combo.setEnabled(False)
@@ -30,34 +30,26 @@ class MapsPanel(QtWidgets.QWidget):
         layout.addLayout(body, stretch=1)
 
         field_widget = QtWidgets.QWidget()
-        field_widget.setMaximumWidth(86)
-        field_layout = QtWidgets.QGridLayout(field_widget)
+        field_widget.setMaximumWidth(60)
+        field_layout = QtWidgets.QVBoxLayout(field_widget)
         field_layout.setContentsMargins(0, 0, 0, 0)
-        field_layout.setHorizontalSpacing(4)
-        field_layout.setVerticalSpacing(4)
+        field_layout.setSpacing(4)
 
         self.field_button_map: dict[str, str] = {}
         self.field_buttons: dict[str, QtWidgets.QPushButton] = {}
-        legacy_buttons = [
-            ("Kx", "P"),
-            ("Kz", "P"),
-            ("Sb", "SB"),
-            ("St", "ST"),
+        field_definitions = [
             ("P", "P"),
-            ("Pv", "P"),
-            ("Sv", "ST"),
-            ("Sg", "SB"),
-            ("V", "ST"),
-            ("U", "SB"),
+            ("ST", "ST"),
+            ("SB", "SB"),
         ]
-        for index, (label, field) in enumerate(legacy_buttons):
+        for label, field in field_definitions:
             button = QtWidgets.QPushButton(label)
             button.setCheckable(True)
-            button.setFixedSize(34, 26)
-            row, col = divmod(index, 2)
-            field_layout.addWidget(button, row, col)
+            button.setFixedSize(48, 28)
+            field_layout.addWidget(button)
             self.field_button_map[label] = field
             self.field_buttons[label] = button
+        field_layout.addStretch(1)
         body.addWidget(field_widget, stretch=0)
 
         self.plot = pg.PlotWidget()

@@ -12,7 +12,7 @@ from reservoir_sr.features.simulation.presentation.panels.runtime_panel import R
 class DataSourcesPanel(QtWidgets.QGroupBox):
 
     def __init__(self) -> None:
-        super().__init__("Источник данных")
+        super().__init__("Data source")
         layout = QtWidgets.QVBoxLayout(self)
 
         self.mode_tabs = QtWidgets.QTabWidget()

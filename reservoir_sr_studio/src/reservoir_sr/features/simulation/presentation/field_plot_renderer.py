@@ -256,5 +256,5 @@ class FieldPlotRenderer:
 
     def field_title(self, current_field: str) -> str:
         if current_field == "P":
-            return "Распределение давления P"
-        return f"Распределение насыщенности {current_field}"
+            return "Pressure distribution P"
+        return f"{current_field} saturation distribution"
