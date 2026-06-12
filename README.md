@@ -7,12 +7,12 @@ Desktop-приложение для **Super-Resolution** карт давлени
 ### Runtime-симуляция с восстановлением через SR-модели
 Карты низкого разрешения, генерируемые симулятором в реальном времени, апскейлятся обученной нейросетью на лету.
 
-<video src="demo/runtime_simulator_demo.mp4" controls width="100%"></video>
+[<video src="demo/runtime_simulator_demo.mp4" controls width="100%"></video>](https://github.com/user-attachments/assets/65aefef5-3413-4382-a30d-f73ec40784f0)
 
 ### Валидация модели на тестовом архиве
 Покадровое сравнение `LR / SR / HR / |HR-SR|` по трём каналам (`P`, `ST`, `SB`).
 
-<video src="demo/models_validation_demo.mp4" controls width="100%"></video>
+[<video src="demo/models_validation_demo.mp4" controls width="100%"></video>](https://github.com/user-attachments/assets/31d744b8-6e79-4ec7-a13b-f78bc9b6191c)
 
 ---
 
