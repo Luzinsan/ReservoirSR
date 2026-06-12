@@ -1,44 +1,19 @@
-# ==========================================================================
-# Глобальные параметры, общие для всего пайплайна.
-# Не привязаны к конкретному модулю (data/model/trainer).
-# ==========================================================================
+artifacts_dir: /mnt/home/ReservoirSR/artifacts
 
-# Глобальный seed для воспроизводимости.
-# Используется в seed_everything(), split_seed, сэмплировании и т.д.
 seed: 42
-
-# Имя проекта.
 project_name: reservoir_sr
-
-# Имя эксперимента.
-# Переопределяется в каждом experiment/*.yaml.
 experiment_name: default
-
-# Путь к чекпоинту для возобновления обучения.
-# null = обучение с нуля.
 resume_from: null
 
-# ── MLflow ───────────────────────────────────────────────────────
 mlflow:
-  # Для локального MLflow server:
-  #   http://127.0.0.1:5000
-  tracking_uri: http://127.0.0.1:5000
-
-  # Имя эксперимента в MLflow UI.
+  tracking_uri: http://127.0.0.1:5001
   experiment_name: ${globals.experiment_name}
-
-  # Имя конкретного run.
   run_name: ${globals.experiment_name}
-
-  # Локальная директория артефактов (актуально для file-store).
-  save_dir: ./mlruns
-
-  # Логировать ли model artifact через Lightning MLflowLogger.
+  save_dir: ${globals.artifacts_dir}/mlflow/artifacts
   log_model: false
 
-# ── Profiler ─────────────────────────────────────────────────
-# Профилирование пайплайна обучения.
-# simple  = текстовая сводка (DataLoader vs forward vs backward)
-# pytorch = полный torch.profiler trace
-# null    = отключено
+csv:
+  save_dir: ${globals.artifacts_dir}/csv
+  report_path: ${globals.artifacts_dir}/reports/experiments_report.csv
+
 profiler: null

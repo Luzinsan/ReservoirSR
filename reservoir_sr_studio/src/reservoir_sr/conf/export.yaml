@@ -1,0 +1,42 @@
+defaults:
+  - globals: default
+  - model: rfdn
+  - override /model/scheduler: none
+  - _self_
+
+
+source_checkpoint: null
+output_path: null
+
+source_dir: ${globals.artifacts_dir}/checkpoints/gan_rfdn
+destination_dir: ${globals.artifacts_dir}/checkpoints/export
+
+# source_checkpoint: ${globals.artifacts_dir}/checkpoints/best/epoch=077-ssim=0.5892.ckpt
+# output_path: ${globals.artifacts_dir}/checkpoints/export/srresnet_epoch=077-ssim=0.5892.onnx
+
+
+prefer_ema: true
+
+export:
+  dummy_input_shape: [1, 3, 50, 100]
+  input_names: ["lr"]
+  output_names: ["sr"]
+  opset_version: 17
+
+  do_constant_folding: true
+
+  dynamic_axes:
+    lr:
+      0: batch
+      2: height
+      3: width
+    sr:
+      0: batch
+      2: height_out
+      3: width_out
+
+hydra:
+  run:
+    dir: ${globals.artifacts_dir}/hydra/export/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job:
+    chdir: false

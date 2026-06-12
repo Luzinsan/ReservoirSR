@@ -3,7 +3,6 @@
 # Experiment: lightweight MSRResNet baseline.
 
 defaults:
-  - override /task: sr
   - override /model: srresnet
   - override /trainer: default
   - override /data/condition: none
@@ -13,8 +12,12 @@ globals:
 
 model:
   optimizer:
-    lr: 0.0002
+    lr: 4e-4
+    weight_decay: 1e-4
+  scheduler:
+    eta_min: 1e-6
 
 trainer:
-  max_epochs: 100
+  max_epochs: 150
   gradient_clip_val: 5.0
+  check_val_every_n_epoch: 5

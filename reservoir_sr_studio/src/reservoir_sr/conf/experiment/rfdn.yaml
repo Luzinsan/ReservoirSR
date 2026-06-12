@@ -1,0 +1,21 @@
+# @package _global_
+defaults:
+  - override /model: rfdn
+  - override /trainer: default
+  - override /data/condition: none
+
+globals:
+  experiment_name: rfdn_baseline
+
+
+model:
+  optimizer:
+    lr: 4e-4
+    weight_decay: 1e-4
+  scheduler:
+    eta_min: 1e-6
+
+trainer:
+  max_epochs: 150
+  gradient_clip_val: 5.0
+  check_val_every_n_epoch: 5

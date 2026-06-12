@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 
 import numpy as np
 
@@ -13,7 +13,7 @@ from reservoir_sr.domain.simulation.config_models import SimulationConfig
 # ------------------------------------------------------------------
 
 
-class SamplingScale(StrEnum):
+class SamplingScale(Enum):
     LINEAR = "linear"
     LOG10 = "log10"
 

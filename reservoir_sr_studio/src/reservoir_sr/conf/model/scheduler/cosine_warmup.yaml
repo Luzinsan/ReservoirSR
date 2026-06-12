@@ -1,0 +1,7 @@
+# ==========================================================================
+# Linear warmup + cosine annealing.
+# ==========================================================================
+_target_: reservoir_sr.ml.training.schedulers.WarmupCosineLR
+warmup_epochs: 5
+max_epochs: ${trainer.max_epochs}
+eta_min: 1.0e-6

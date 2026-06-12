@@ -16,3 +16,7 @@ venv/
 .vs/
 .idea/
 
+torch-cu121/*
+artifacts/*
+memory/*
+datasets/*

@@ -37,5 +37,5 @@ class DataTabPanel(QtWidgets.QWidget):
 
         self.tabs = QtWidgets.QTabWidget()
         root_layout.addWidget(self.tabs, stretch=1)
-        self.tabs.addTab(self.maps_widget, "Карты")
-        self.tabs.addTab(self.metrics_widget, "Характеристики")
+        self.tabs.addTab(self.maps_widget, "Maps")
+        self.tabs.addTab(self.metrics_widget, "Metrics")

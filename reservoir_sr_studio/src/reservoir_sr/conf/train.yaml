@@ -9,7 +9,17 @@
 defaults:
   - globals: default
   - data: default
-  - task: sr
   - model: mdsr
   - trainer: default
   - _self_
+
+task: sr
+
+hydra:
+  run:
+    dir: ${globals.artifacts_dir}/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}_${globals.experiment_name}
+  sweep:
+    dir: ${globals.artifacts_dir}/hydra/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}_${globals.experiment_name}
+  job:
+    chdir: false

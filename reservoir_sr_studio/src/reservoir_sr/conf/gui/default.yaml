@@ -1,0 +1,10 @@
+defaults:
+  - general
+  - data
+  - inference
+  - _self_
+
+window:
+  title: "Reservoir SR Studio"
+  width: 1500
+  height: 850

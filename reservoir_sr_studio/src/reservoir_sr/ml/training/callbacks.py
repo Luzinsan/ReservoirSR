@@ -102,7 +102,7 @@ class SrVisualizationCallback(pl.Callback):
         }
 
         with torch.no_grad():
-            pred = pl_module.model(model_batch).float().cpu()
+            pred = pl_module._eval_model()(model_batch).float().cpu()
         target = vis_batch["hr"].float()
         lr = vis_batch["lr"].float()
 

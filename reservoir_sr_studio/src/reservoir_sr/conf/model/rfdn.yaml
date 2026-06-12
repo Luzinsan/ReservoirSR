@@ -1,0 +1,11 @@
+defaults:
+  - optimizer: adamw
+  - scheduler: cosine
+  - loss: l1
+
+_target_: reservoir_sr.ml.models.rfdn.RFDN
+in_channels: 3
+out_channels: 3
+scale: 4
+n_features: 50
+n_blocks: 6

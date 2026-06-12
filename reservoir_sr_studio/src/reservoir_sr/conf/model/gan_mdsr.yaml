@@ -1,0 +1,80 @@
+# ==========================================================================
+# GAN config: MDSRBaseline generator (без conditioning) + Residual PatchGAN.
+# ==========================================================================
+
+generator:
+  _target_: reservoir_sr.ml.models.mdsr.MDSRBaseline
+  in_channels: 3
+  out_channels: 3
+  scale: 4
+  n_blocks: 16
+  n_features: 64
+  res_scale: 0.1
+  condition_dim: 0
+
+discriminator:
+  _target_: reservoir_sr.ml.models.discriminators.ResidualFieldDiscriminator
+  in_channels: 3
+  base_channels: 64
+  n_layers: 3
+
+pixel_loss:
+  _target_: torch.nn.L1Loss
+
+perceptual_loss:
+  _target_: reservoir_sr.ml.training.gan_module.PhysicsPerceptualLoss
+  grad_weight: 1.0
+  spectral_weight: 0.5
+
+adv_loss:
+  _target_: torch.nn.BCEWithLogitsLoss
+
+# ── Loss weights ────────────────────────────────────────────
+pixel_weight: 1.0
+perc_weight: 0.5
+adv_weight: 0.1
+
+# ── Training schedule ───────────────────────────────────────
+d_warmup_epochs: 5
+warmup_epochs: 10
+d_steps: 1
+g_steps: 1
+
+# ── D stabilization ─────────────────────────────────────────
+d_input_noise_std: 0.02
+d_input_noise_decay_epochs: 30
+d_skip_threshold: 0.35
+d_refresh_every: 5
+
+# ── Loss variants ───────────────────────────────────────────
+use_ragan: true
+real_label: 0.9
+fake_label: 0.0
+
+# ── Stability ───────────────────────────────────────────────
+grad_clip_val: 1.0
+ema_decay: 0.99
+
+# ── Pretrain ────────────────────────────────────────────────
+resume_generator_from: /mnt/home/ReservoirSR/artifacts/checkpoints/best/mdsr_generator.ckpt
+
+# ── Optimizers ───────────────────────────────────────
+g_optimizer:
+  _target_: torch.optim.Adam
+  lr: 5.0e-5
+  betas: [0.9, 0.99]
+
+d_optimizer:
+  _target_: torch.optim.Adam
+  lr: 2.0e-4
+  betas: [0.9, 0.99]
+
+g_scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: ${trainer.max_epochs}
+  eta_min: 1.0e-6
+
+d_scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: ${trainer.max_epochs}
+  eta_min: 1.0e-6

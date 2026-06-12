@@ -19,7 +19,6 @@ from reservoir_sr.features.simulation.presentation.view_models import DataTabVie
 from reservoir_sr.infrastructure.grpc.simulation_client import GrpcSimulationClient
 
 
-
 class DataTabController:
 
     def __init__(self, context: AppContext, panel: DataTabPanel) -> None:
@@ -33,7 +32,7 @@ class DataTabController:
         self.client = GrpcSimulationClient(self.context.general.endpoint)
 
         self.render_ctrl = MapRenderController(
-            settings=self.context.data,
+            context=self.context,
             maps_widget=self.panel.maps_widget,
             metrics_widget=self.panel.metrics_widget,
             logger=self.logger.child("MapRenderController"),
@@ -93,7 +92,11 @@ class DataTabController:
         DATA_TAB_BINDINGS = [
             ("active_tab", "mode_tabs", "index"),
         ]
+        DATA_SETTINGS_BINDINGS = [
+            ("simulation_config_path", "config_panel.path_edit", "text"),
+        ]
         autobind(self.tab_vm, self.panel.data_sources_panel, DATA_TAB_BINDINGS)
+        autobind(self.context.data, self.panel, DATA_SETTINGS_BINDINGS)
 
     def _bind_subscriptions(self) -> None:
         self.context.nav.subscribe(self.on_nav_changed)
@@ -161,6 +164,7 @@ class DataTabController:
         self.playback_state.is_playing = False
 
     def close_resources(self) -> None:
+        self.render_ctrl.engine.unload()
         self.client.close()
 
     def apply_project(self, project: dict[str, Any]) -> None:

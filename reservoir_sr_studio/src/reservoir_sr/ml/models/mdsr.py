@@ -96,7 +96,7 @@ class FiLMGenerator(nn.Module):
 
 
 class MDSRBaseline(nn.Module):
-    """Multiscale Deep Super-Resolution (MDSR) model.
+    """Single-scale Deep Super-Resolution (MDSR) model.
 
     Works in two modes depending on ``condition_dim``:
     - **Unconditional** (``condition_dim=0``): pure image SR from ``lr`` only.
@@ -122,11 +122,6 @@ class MDSRBaseline(nn.Module):
 
         self.head = nn.Conv2d(in_channels, n_features, kernel_size=3, padding=1)
 
-        self.pre_process = nn.Sequential(
-            nn.Conv2d(n_features, n_features, kernel_size=5, padding=2),
-            nn.Conv2d(n_features, n_features, kernel_size=5, padding=2),
-        )
-
         self.blocks = nn.ModuleList(
             [ResBlock(n_features, res_scale) for _ in range(n_blocks)]
         )
@@ -148,7 +143,6 @@ class MDSRBaseline(nn.Module):
             film_pairs = self.film_gen(emb)
 
         x = self.head(x)
-        x = self.pre_process(x)
 
         res = x
         for i, block in enumerate(self.blocks):

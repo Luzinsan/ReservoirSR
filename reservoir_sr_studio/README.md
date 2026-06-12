@@ -12,32 +12,17 @@ pip install -e .[ml]
 
 Training logs are written to **MLflow** (TensorBoard is not used).
 
-- Default tracking URI (in config): `http://127.0.0.1:5000`
+- Start MLFlow Server:
+`mlflow server     --host 127.0.0.1     --port 5001     --backend-store-uri sqlite:////mnt/home/ReservoirSR/artifacts/mlflow/backend/mlflow.db     --default-artifact-root /mnt/home/ReservoirSR/artifacts/mlflow/artifacts`
+- Default tracking URI: `http://127.0.0.1:5001`
 - If needed, you can still override it from CLI:
   - `reservoir-sr-train +experiment=mdsr_baseline globals.mlflow.tracking_uri=file:./mlruns`
 
 To open local MLflow UI:
 
 ```bash
-mlflow ui --host 127.0.0.1 --port 5000
+mlflow ui --host 127.0.0.1 --port 5001
 ```
-
-Export compact auto-report from MLflow (CSV + Markdown):
-
-```bash
-reservoir-sr-report-mlflow
-```
-
-Output files:
-- `reports/mlflow_sr_report.csv`
-- `reports/mlflow_sr_report.md`
-
-The report includes only core SR KPIs:
-- `val_psnr/mean`
-- `val_structural/ssim`
-- `val_spectral/ergas`
-- `val_physics/grad_mae`
-- `val_physics/max_ae`
 
 All commands below are run from `reservoir_sr_studio`:
 
