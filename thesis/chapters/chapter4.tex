@@ -1,0 +1,85 @@
+\chapter{Implementation}
+\label{chap:implementation}
+
+This chapter describes the practical implementation of the designed super-resolution framework and presents the results of the conducted experiments. The software complex is developed as a modular system, integrating numerical simulation, deep learning training pipelines, and an interactive user interface for industrial application.
+
+\section{Data Generation Module}
+\label{sec:data_module}
+
+The Data Generation Module is designed as the primary engine for creating high-fidelity synthetic datasets required for training and validating the super-resolution models. This component is implemented using the PyQt framework to provide an interactive graphical interface for configuring complex physical simulations. The software architecture follows a modular object-oriented design, comprising several specialized classes that decouple physical logic from the user interface and data management.
+
+The internal structure of the module includes the following functional components:
+\begin{itemize}
+    \item \textbf{PhysicalEngine Class:} This core component contains the mathematical implementation of the single-level Type II fractured-porous model. It handles the iterative pressure updates via the summary sweep method and the convective saturation transport.
+    \item \textbf{ParameterManager Class:} This class is responsible for the validation and persistence of simulation variables. It manages the import and export of simulation configurations through a standardized JSON format, ensuring that different research sessions remain consistent.
+    \item \textbf{SimulationWorker Class:} This class inherits from the QThread primitive to execute heavy numerical calculations in the background. It utilizes asynchronous communication with the main interface to report progress without blocking the user experience.
+\end{itemize}
+
+The user interface provides a comprehensive control panel where researchers can define exact numerical bounds for the reservoir state variables. To enhance the reliability of the generated data, the input fields are restricted at the design level to prevent the entry of physically impossible or computationally unstable values. For instance, the interface enforces a strict minimum bound for permeability to avoid numerical stiffness and ensures that porosity values remain within the logical unit interval. For rapid configuration, the module allows users to load predefined parameter sets from JSON files and specify a dedicated output directory for the resulting HDF5 tensors.
+
+To maximize computational throughput on modern hardware, the module incorporates advanced performance optimization techniques. The system automatically detects the number of available physical and logical CPU cores on the host machine and displays this count within the settings panel. Users can manually specify the number of parallel threads to be utilized for data generation. The performance is further enhanced through the targeted application of the Numba just-in-time compiler in the following scenarios:
+\begin{itemize}
+    \item \textbf{Implicit Solver Loops:} The iterative loops within the five-point summary sweep algorithm are compiled to machine code using the nopython mode to achieve execution speeds comparable to C code.
+    \item \textbf{Spatial Gradient Calculations:} The computation of pressure gradients and upwind differencing for saturation updates are optimized through JIT decoration to ensure that high-resolution target generation does not become a bottleneck.
+\end{itemize}
+
+The module supports a diverse array of sampling strategies to populate the parameter space effectively. Beyond the deterministic grid search mode and stochastic random search, the interface incorporates advanced space-filling designs:
+\begin{itemize}
+    \item \textbf{Latin Hypercube Sampling:} This technique partitions the range of each variable into equal-probability intervals, ensuring that the entire distribution of petrophysical properties is uniformly represented. This prevents the formation of data clusters and ensures that edge cases of the fluid displacement process are present in the training set.
+    \item \textbf{Sobol Sequences:} As a type of low-discrepancy sequence, Sobol sampling provides a more uniform distribution of points in the multi-dimensional space compared to pure random search. This approach is particularly robust for incremental dataset growth, as the optimal space-filling property is maintained even for small subsets of generated samples.
+    \item \textbf{Halton Sequences:} This method utilizes prime numbers as bases to generate well-distributed points across the parameter domain. It offers high computational efficiency for the relatively low-dimensional state space considered in this study, avoiding the undesired correlations sometimes associated with pseudo-random generators.
+\end{itemize}
+
+A specialized feature allows for appending new samples to an existing dataset. In such cases, the interface displays a warning message stating that significant data duplication may reduce the generalization efficiency of the neural network during the training phase. Real-time feedback is provided during the generation process through an interactive progress bar. This component displays the current generation count, the remaining number of samples, and a dynamic estimate of the time remaining until completion. To maintain strict control over the computational resources, the interface includes a dedicated button for the immediate forced termination of the simulation threads, ensuring that the user can interrupt the process in case of numerical instability or configuration errors.
+
+
+\section{Training and Experiment Tracking Module}
+\label{sec:training_module}
+
+The Training and Experiment Tracking Module is developed as a modular pipeline based on the PyTorch Lightning framework to ensure a strict separation between data management, model topology, and optimization logic. The software architecture utilizes an object-oriented approach where the execution flow is governed by several specialized class hierarchies.
+
+The data management layer is implemented through the \textbf{ReservoirDataModule} class, which encapsulates the logic for loading HDF5 tensors. This class utilizes the \textbf{StateDataLoader} to manage the distribution of three-channel samples into mini-batches. Within the graphical interface, a dedicated field allows the user to specify the dataset directory path, while a toggle system enables or disables spatial augmentations. Specifically, the horizontal flipping strategy is implemented to enhance the model's geometric robustness without violating the vertical pressure gradients described in Section~\ref{sec:theoretical_foundations}.
+
+The model architecture follows a hierarchical design to facilitate comparative analysis:
+\begin{itemize}
+    \item \textbf{AbstractStateModel:} This base class defines the standard interface for all spatial reconstruction tasks, including forward pass logic and logging hooks.
+    \item \textbf{MDSRNet and RRDBNet Classes:} These represent concrete implementations of the regression architectures detailed in Section~\ref{sec:regression_baselines}. 
+    \item \textbf{AbstractGANModule:} This class provides the boilerplate for adversarial training, managing the interaction between the generator and the discriminator.
+    \item \textbf{CoupledRRDBGAN:} A specialized implementation of the adversarial framework that utilizes the RRDB generator. This class includes logic for optional weight initialization from a pre-trained RRDBNet state to improve convergence stability.
+\end{itemize}
+
+For maximum extensibility, the module interface includes a scriptable architecture field. This feature allows researchers to either provide custom neural network code or import state-of-the-art backbones directly from the \textbf{timm} library. The optimization objective is managed by a \textbf{ComposableLossPlugin}, which enables the user to assemble a total loss function from individual sub-terms, including point-wise accuracy, perceptual feature distance, and the dual-system mass balance regularizer derived in Section~\ref{sec:physics_regularization}.
+
+To ensure numerical stability during the training of highly non-linear fluid dynamics, several guardrail mechanisms are strictly enforced. The \textbf{GradientClipping} technique is applied to all trainable weights to prevent gradient explosion caused by sharp pressure transitions. The training process incorporates the \textbf{EarlyStopping} callback to terminate execution if the validation material balance error plateaus. Furthermore, a \textbf{LearningRateScheduler} is implemented to dynamically adjust the optimization step according to predefined milestones or plateau detections.
+
+The integration with the ClearML platform serves as the central laboratory for monitoring experiments. The system is configured to track the following analytical data:
+\begin{itemize}
+    \item \textbf{Iterative Logging:} Loss values for each plugin component are recorded at every computational step to monitor high-frequency adversarial fluctuations.
+    \item \textbf{Metric Visualization:} Interactive learning curves and per-epoch metrics are generated using the Plotly library.
+    \item \textbf{Spatial Diagnostics:} The module automatically generates Fourier spectrum maps and Error Heatmaps. These heatmaps visualize the localized residuals between the predicted and ground truth states, allowing for a detailed qualitative assessment of the reconstruction quality near wellbore regions.
+\end{itemize}
+
+The user interface provides a dedicated tab for automated Hyperparameter Optimization utilizing the \textbf{Optuna} framework. Users can define search intervals for parameters such as the mass balance weighting coefficient and the initial learning rate. These parameters are passed to the model and the Lightning Trainer class through a structured configuration dictionary. For operational control, the module includes immediate forced stop and manual weight preservation buttons. A diagnostic visualization feature allows the user to display a random sequence of low-resolution inputs, high-resolution targets, and the corresponding model predictions for immediate verification. Finally, the module provides a deployment utility to convert the optimized network into the ONNX or TensorRT formats, ensuring high-performance inference across different hardware environments.
+
+\section{Inference and Visualization Module}
+\label{sec:inference_module}
+
+The Inference and Visualization Module serves as the operational interface of the software complex, allowing researchers and engineers to execute rapid surrogate simulations using trained super-resolution models. This component is built using the PyQt framework and follows an asynchronous processing paradigm to ensure that the graphical user interface remains responsive during intensive tensor computations.
+
+The operational workflow begins with the configuration of the input parameters and model selection. The module provides a utility to import reservoir configurations from standardized JSON files, which define the petrophysical properties and boundary conditions for the coarse-grid simulation. Users can manually specify the weight file of the pre-trained model and select the desired hardware acceleration backend. The interface supports two primary execution modes:
+\begin{itemize}
+    \item \textbf{TensorRT Backend:} Utilizes high-performance GPU-specific optimization for NVIDIA hardware, minimizing forward pass latency through kernel fusion and precision calibration.
+    \item \textbf{CPU Backend:} Executes the computational graph using the ONNX Runtime engine with integer quantization.
+\end{itemize}
+To enhance the user experience, the system performs an automatic hardware audit upon startup. If a compatible graphics processing unit is not detected, the corresponding selection button is programmatically disabled and visually greyed out, accompanied by a notification panel informing the user about the absence of CUDA-compatible hardware.
+
+Before the execution phase, a strict validation procedure is performed to ensure the structural compatibility of the selected model and the input data. The module compares the expected input dimensions of the neural network weights with the spatial resolution of the current coarse-grid simulation. If a mismatch is detected, the process is halted with a diagnostic error message to prevent runtime memory corruption. Once the configuration is verified, the \textbf{InferenceWorker} class, inheriting from the QThread primitive, initiates the transient reconstruction process. 
+
+During the temporal loop, the surrogate model sequentially processes snapshots of the fluid displacement history. The interface provides real-time telemetry through a dynamic progress bar, displaying the elapsed time, the estimated time of arrival for the final step, and the current utilization percentages for both the CPU and the GPU. The reconstructed high-resolution fields are presented across three dedicated analytical tabs:
+\begin{itemize}
+    \item \textbf{Pressure Tab:} Displays the global pressure distribution $P$, highlighting the recovered localized gradients near the injection and production wells.
+    \item \textbf{Fracture Saturation Tab:} Visualizes the sharp convective displacement fronts $S$ within the high-permeability network.
+    \item \textbf{Matrix Saturation Tab:} Represents the slow accumulation of the water phase $\bar{S}$ within the isolated blocks.
+\end{itemize}
+
+Upon completion of the inference sequence, the module executes a final evaluation stage. It automatically calculates the complete suite of established metrics, including structural similarity, perceptual distance, and the dual-system material balance error derived in Section~\ref{sec:physics_regularization}. These values are displayed within a summary dashboard, providing the engineer with immediate mathematical confirmation of the physical consistency and topological fidelity of the generated surrogate simulation.
