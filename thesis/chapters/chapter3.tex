@@ -7,15 +7,318 @@ This chapter formalizes the reconstruction task addressed in the thesis, defines
 \section{Problem Formulation}
 \label{sec:method_problem}
 
-Reservoir simulation produces a sequence of spatial snapshots that describe the thermodynamic state of a fractured-porous medium of Type~II at discrete instants of time. Each snapshot is a three-channel field comprising the global pressure $P$, the water saturation in the fracture network $S$, and the water saturation in the matrix blocks $\bar{S}$. The reconstruction task is formulated at the level of a single time step: for any fixed instant of the simulation, the network receives a coarse-grid realization of these three channels and the auxiliary scalar information available at the same instant, and produces a fine-grid estimate of the same three channels. The temporal evolution is recovered by applying the same reconstruction independently at each time step.
+Reservoir simulation produces a sequence of spatial snapshots that describe the hydrodynamic state of a fractured-porous medium of Type~II at discrete instants of time. Each snapshot is a three-channel field comprising the global pressure $P$, the water saturation in the fracture network $S$, and the water saturation in the matrix blocks $\bar{S}$. The reconstruction task is formulated at the level of a single time step: for any fixed instant of the simulation, the network receives a coarse-grid realization of these three channels and the auxiliary scalar information available at the same instant, and produces a fine-grid estimate of the same three channels. The temporal evolution is obtained by applying the same reconstruction independently at each time step.
 
-Let $X^{LR} \in \mathbb{R}^{C \times h \times w}$ denote the coarse-grid snapshot with $C = 3$ channels and spatial dimensions $h \times w$, and let $X^{HR} \in \mathbb{R}^{C \times H \times W}$ denote the corresponding fine-grid snapshot with $H = s h$ and $W = s w$, where $s$ is the upscaling factor along each spatial axis. A vector of auxiliary scalars $\mathbf{z} \in \mathbb{R}^{d}$ is associated with the same simulation instant. A super-resolution generator is a parametric mapping
+Let $X^{LR} \in \mathbb{R}^{C \times h \times w}$ denote the coarse-grid snapshot with $C = 3$ channels and spatial dimensions $h \times w$, and let $X^{HR} \in \mathbb{R}^{C \times H \times W}$ denote the corresponding fine-grid snapshot with $H = s h$ and $W = s w$, where $s$ is the upscaling factor applied identically along both spatial axes. A vector of auxiliary scalars $\mathbf{z} \in \mathbb{R}^{d}$ is associated with the same simulation instant. A super-resolution generator is a parametric mapping
 \begin{equation}
     G_{\theta} : \bigl(X^{LR}, \mathbf{z}\bigr) \mapsto \widehat{X}^{HR} \in \mathbb{R}^{C \times H \times W},
     \label{eq:sr_mapping}
 \end{equation}
-parameterized by $\theta$. When the vector $\mathbf{z}$ is omitted, the mapping reduces to $G_{\theta}(X^{LR})$ and the generator is referred to as unconditional. Training consists in fitting $\theta$ to a finite collection of paired snapshots $\{(X^{LR}_n, X^{HR}_n, \mathbf{z}_n)\}_{n=1}^{N}$ produced by the numerical simulator under varied physical and operational parameters.
+parameterized by $\theta$. When the vector $\mathbf{z}$ is omitted, the mapping reduces to $G_{\theta}(X^{LR})$ and the generator is referred to as unconditional. Training consists in fitting $\theta$ to a finite collection of paired snapshots $\mathcal{D} = \{(X^{LR}_n, X^{HR}_n, \mathbf{z}_n)\}_n$ produced by the numerical simulator under varied physical and operational parameters.
 
-The formulation rests on three assumptions. First, the spatial domain is restricted to a two-dimensional vertical cross-section of the reservoir, which is consistent with the geometry of the simulator used to generate the dataset. Second, the upscaling factor $s$ is fixed across all experiments and equal to the ratio between the fine-grid and coarse-grid horizontal resolution; vertical resolution is unchanged between the two grids. Third, the coarse-grid input is an independent numerical solution of the governing equations on a coarse mesh rather than a downsampled version of the fine-grid target, so the mapping that $G_{\theta}$ has to fit recovers physical information lost during coarse-grid simulation rather than inverting a known downsampling operator.
+The formulation rests on three assumptions. First, the spatial domain is restricted to a two-dimensional axisymmetric radial-vertical section of the reservoir, consistent with the geometry of the simulator used to generate the dataset. Second, the upscaling factor $s$ is fixed across all experiments and is applied identically to both the radial and the vertical resolution of the computational grid. Third, the coarse-grid input is an independent numerical solution of the governing equations on a coarse mesh rather than a downsampled version of the fine-grid target, so the mapping that $G_{\theta}$ has to fit recovers physical information lost during coarse-grid simulation rather than inverting a known downsampling operator.
 
-The three hypotheses formulated in the introduction translate into three experimental contrasts that share a common evaluation protocol. The first contrast compares residual generators of different depth, trained with the same pixel-wise objective, on the point-wise reconstruction error of the three-channel field. The second contrast compares the same generators before and after fine-tuning within an adversarial framework, with the comparison performed jointly across point-wise metrics and across structural and spectral metrics, so that the trade-off between the two metric groups is observable. The third contrast compares the deepest residual generator in two configurations, one unconditional and one supplied with the vector $\mathbf{z}$, on the same metric suite.
+The three hypotheses formulated in the introduction translate into three experimental contrasts that share a common evaluation protocol. The first contrast compares residual generators of different depth, trained with the same pixel-wise objective, on the point-wise reconstruction error of the three-channel field. The second contrast compares the same generators before and after fine-tuning within an adversarial framework, with the comparison performed jointly across point-wise metrics and across structural and spectral metrics, so that the trade-off between the two metric groups is measured. The third contrast compares the deepest residual generator in two configurations, one unconditional and one supplied with the vector $\mathbf{z}$, on the same metric suite.
+
+
+\section{Dataset Construction}
+\label{sec:method_dataset}
+
+\subsection{Numerical Simulator}
+\label{subsec:method_simulator}
+
+The training corpus is produced by a numerical solver of the dual-porosity formulation of Section~\ref{sec:theoretical_foundations} on a two-dimensional axisymmetric domain. The spatial coordinates are the radial distance $r$ from the well axis and the vertical coordinate $z$. The computational domain is bounded internally by the wellbore radius $R_{\text{skv}}$ and externally by the drainage radius $V_L$, with a structurally fixed partition into five horizontal layers indexed by $k = 1, \dots, 5$. Each layer $k$ carries its own thickness $h_k$, vertical discretization $n_z^{(k)}$, fracture and matrix porosities, irreducible and maximum water saturations, and absolute permeabilities in fracture and matrix sub-systems. The radial grid is uniform with step $\Delta r = V_L / N_X$, the vertical step inside each layer is uniform and equal to $h_k / n_z^{(k)}$, and the vertical grid is the concatenation of the layer-wise vertical partitions, so the total number of vertical cells is $N_Z = \sum_k n_z^{(k)}$.
+
+The solver advances the simulation in time with a fixed time step $\Delta t$ using a sequential implicit-explicit scheme. At every step the pressure equation~(\ref{eq:fpor_pressure}) is linearized and solved implicitly by an iterative procedure that alternates a block-tridiagonal radial sweep with a global update of the boundary fluxes, until the combined update norm of the pressure field falls below a tolerance $\varepsilon_p$. Once the pressure field is updated, the saturation equations~(\ref{eq:fpor_frac_sat}) and~(\ref{eq:fpor_block_sat}) are advanced explicitly through $N_{\text{dr}}$ drainage sub-steps of size $\Delta t / N_{\text{dr}}$. The inter-porosity exchange term $q_\Sigma$ of Equation~(\ref{eq:mass_transfer}) enters both saturation equations and is evaluated at every sub-step from the current saturation profile and the relative phase mobilities; the apparent viscosity of the oil phase depends on the local Darcy velocity through a rheological closure parameterized by the constants $X_A$ and $X_D$. Relative permeabilities follow a power law in the matrix sub-system, with empirical exponents $3.13$ for the wetting phase and $2.73$ for the non-wetting phase, and a linear law in the fracture sub-system.
+
+The boundary conditions match the operational setting of a producing well in a finite drainage area with constant-pressure outer support. On the inner boundary $r = R_{\text{skv}}$ the well flow rate $Q_{\text{zab}}$ is prescribed, which fixes the radial Darcy flux entering the wellbore. On the outer boundary $r = V_L$ the pressure is held at the constant value $P_{32}$. The initial pressure field is a steady-state radial profile consistent with the prescribed boundary conditions, and the initial saturation distribution places the hydrocarbon-bearing layers at their irreducible water saturation and the underlying aquifer layer at full water saturation.
+
+For every simulation case the solver is executed twice in parallel with identical physical parameters and identical boundary conditions but on two different computational grids. The fine-grid (HR) run uses $N_X^{HR}$ radial cells and a vertical discretization $s \cdot n_z^{(k)}$ in each layer, where $s$ is the spatial upscaling factor of the problem formulation. The coarse-grid (LR) run uses $N_X^{LR} = N_X^{HR} / s$ radial cells and the layer-wise vertical discretization $n_z^{(k)}$ prescribed by the simulation case. The two runs are therefore independent numerical solutions of the same dual-porosity system, and the LR snapshot is not a downsampled version of the HR snapshot but a separate realization that contains its own numerical diffusion and lacks subgrid detail. At inference time only the coarse-grid solution is available, and the super-resolution generator maps it to the corresponding fine-grid solution.
+
+A simulation case is characterized by the full vector of physical and operational parameters of the dual-porosity formulation, by the well control regime, and by the layer-wise petrophysical properties. At the end of each time step the solver records the three coupled state fields $P$, $S$ and $\bar{S}$ on both grids, together with the integral quantities recorded at the same instant: the bottomhole pressure, the cumulative fluid production, the water cut, the oil recovery factors of the two sub-systems, and the mass-balance error indicators. The recorded snapshots and the corresponding scalar metadata are stored in a single archive per case.
+
+\subsection{Parameter Space and Sampling Strategy}
+\label{subsec:method_sampling}
+
+A training corpus that supports the experimental contrasts of the problem formulation must cover a wide range of operating regimes and petrophysical configurations. To this end, the dataset is generated as a campaign of simulation cases in which a subset of the parameters is randomized over a prescribed domain while the remaining parameters are held fixed at reference values typical of a Type~II fractured-porous reservoir. The randomized subset contains $D$ parameters and falls into three groups. The first group describes the well control regime and the near-wellbore zone and includes the well flow rate $Q_{\text{zab}}$, the contour pressure $P_{32}$, the wellbore radius $R_{\text{skv}}$, the effective near-wellbore viscosity $\mu_{\text{pazp}}$, and the parameters $X_A$, $X_D$ of the matrix mobility closure. The second group describes the numerical configuration of the solver and includes the number of drainage sub-steps $N_{\text{dr}}$ and the saturation cutoff thresholds introduced in the sampling strategy. The third group consists of layer-wise petrophysical properties, primarily the absolute permeabilities of fracture and matrix in each of the five layers and small shifts of the irreducible and maximum water saturations applied identically across the layers.
+
+The parameter domain is sampled with Latin Hypercube Sampling~\cite{mckay2000lhs}, which generates a stratified-randomized design of $N$ cases over the $D$-dimensional unit cube and maps each marginal coordinate to the corresponding physical range. Parameters with a wide dynamic range, such as the absolute permeabilities and the saturation cutoff thresholds, are sampled on a logarithmic scale; the remaining parameters are sampled linearly. Latin Hypercube Sampling is preferred to plain uniform random sampling because the projection of its design onto every individual parameter axis is a stratified sample of size $N$, which improves marginal coverage at the same total budget.
+
+Every sampled case is subjected to a physical admissibility filter before being submitted to the solver. The filter rejects parameter combinations that violate basic constraints of the formulation, including positivity of the time step, positivity and ordering of the irreducible and maximum saturations within every layer, sufficient simulated time horizon to cover the requested number of snapshots, and compatibility between the prescribed well flow rate $Q_{\text{zab}}$ and the radial geometry. Cases that pass the filter are dispatched to the solver, and their archives are added to the corpus.
+
+The resulting dataset is partitioned into a training subset, a validation subset, and a test subset at the level of complete simulation archives, with proportions of $0.70$, $0.15$, and $0.15$ respectively. The split is performed by a deterministic shuffle with a fixed seed, so the partition is exactly reproducible. Partitioning at the archive level is adopted because snapshots from the same simulation separated by a small number of time steps are strongly correlated in space; placing such snapshots into different subsets would induce a strong correlation between training and validation samples and inflate the apparent generalization performance of the model.
+
+
+\section{Preprocessing}
+\label{sec:method_preprocessing}
+
+\subsection{Field Normalization}
+\label{subsec:method_field_normalization}
+
+The three state channels of the snapshot have different physical ranges. The global pressure $P$ takes values on the scale of several tens of atmospheres and has no natural upper bound: its maximum depends on the operational regime and on the petrophysical configuration of the case. The water saturations $S$ and $\bar{S}$, in contrast, are bounded by construction in the physically admissible saturation range and follow distributions concentrated near the two endpoints of this range. The normalization strategy is selected per channel so that each input quantity is presented to the network in a numerically uniform form while its physical interpretation is preserved.
+
+The pressure channel is standardized by subtracting the per-channel mean and dividing by the per-channel standard deviation, which produces an input with zero mean and unit variance, appropriate for a quantity without natural bounds. The two saturation channels are normalized by an affine min-max transform that maps the per-channel range observed in the training subset to the unit interval $[0, 1]$, which keeps the values within a compact range and preserves their physical meaning as bounded saturations.
+
+The shift and scale parameters of both transforms are estimated once from the training subset of the dataset and are stored as a single set of constants reused for all subsequent operations. Validation, test, and inference samples are normalized with the same constants estimated on the training subset, so that no information about the held-out subsets leaks into the normalization step. Low-resolution and high-resolution snapshots are normalized with separate sets of constants estimated on their respective marginal distributions, because numerical diffusion on the coarse grid produces a different distribution of values than the fine-grid reference even for identical physical parameters. The normalization is invertible, and its inverse is applied to the network's output before computing physically interpretable error metrics.
+
+
+\subsection{Conditioning Vector Composition}
+\label{subsec:method_conditioning_vector}
+
+The condition vector $\mathbf{z}$ introduced in the problem formulation encodes the scalar context that disambiguates the coarse-grid input. Two snapshots that share the same coarse-grid representation can correspond to different fine-grid solutions if the underlying simulation case differs in its operational regime, in its layer-wise petrophysical properties, or in the elapsed simulation time. The vector $\mathbf{z}$ supplies this information explicitly so that the generator can resolve the ambiguity. Its components are organized into three groups that differ in their physical role within the dual-porosity formulation and in the way they vary across the dataset.
+
+The first group, the dynamic group, contains the scalars that evolve along the simulation trajectory and that are recorded at every time step alongside the field snapshot. They include the model time, the bottomhole pressure, the cumulative fluid and oil production at the well, the total water cut and its decomposition into fracture and matrix contributions, the recovery factors of the two sub-systems, and the mass-balance error indicators of the discrete scheme. These scalars carry the current position of the simulation along its temporal evolution and the current state of the well response, which are not encoded in the coarse-grid snapshot.
+
+The second group, denoted static, contains the scalars that are fixed within a simulation case but vary across cases. They include the thermo-baric properties of the oil, water, and gas phases (densities, viscosities, compressibilities, thermal expansion coefficients, specific heat capacities, gas solubility parameters), the geometric and operational parameters of the well and the drainage area (radii, contour pressure, prescribed flow rate, regime indicators), the global discretization parameters of the solver (number of layers, radial resolution, number of drainage sub-steps), and the saturation cutoff thresholds introduced in the sampling strategy. These scalars define the physical regime of the case, in the sense that the entire trajectory of the simulation is determined by their values together with the layer-wise petrophysical configuration.
+
+The third group, denoted layers, contains the petrophysical and geometrical parameters of each of the five horizontal layers introduced above. For each layer, the group records the thickness and vertical discretization, the porosities of the fracture and matrix sub-systems, the irreducible and maximum water saturations of both sub-systems, the absolute permeabilities of the fracture and matrix sub-systems, and two indicator flags that specify the inflow regime of the layer through the wellbore perforation and through the underlying aquifer. The same set of features is recorded for every layer, and the layer-wise feature vectors are concatenated into a single flat sub-vector of $\mathbf{z}$ in layer-index order. These scalars enter the dual-porosity equations as constitutive coefficients and determine the spatial heterogeneity of the fine-grid solution that the coarse-grid input does not resolve.
+
+A complete inventory of the components of $\mathbf{z}$ is given in Table~\ref{tab:condition_vector}, with their physical meaning, group, and normalization strategy. Each component is normalized independently with statistics estimated on the training subset, in the same way as the field channels. The normalization strategy is selected per component according to its dynamic range and its physical structure: bounded quantities with a natural minimum and maximum are mapped to the unit interval by an affine min-max transform, quantities that vary over several orders of magnitude are first transformed to a logarithmic scale and then normalized in the same way, quantities that are centered around an operational value and have no natural bounds are standardized to zero mean and unit variance, and integer-valued flags and configuration indicators are passed through unchanged.
+
+The composition of $\mathbf{z}$ is configurable. The full condition vector contains every component of all three groups and has dimension $d = 131$. Two restricted configurations are also defined: a dynamic-only configuration that retains the dynamic group and discards the other two, used to assess the contribution of the static and the layer-wise context to the reconstruction; and an empty configuration in which the condition vector is omitted altogether, used as the unconditional baseline of the third experimental contrast of the thesis.
+
+\begin{table}[h]
+\centering
+\caption{Components of the condition vector $\mathbf{z}$.}
+\label{tab:condition_vector}
+\small
+\begin{tabularx}{\textwidth}{l X c l}
+\toprule
+Group & Component or category & Size & Norm.\ strategy \\
+\midrule
+\multirow{14}{*}{dynamic}
+ & model time $t$                                                        & 1  & none \\
+ & bottomhole pressure $P_{\text{w}}$                                    & 1  & minmax \\
+ & cumulative fluid production $Q_{\text{w}}$                            & 1  & minmax \\
+ & cumulative oil production, total $Q^o$                                & 1  & minmax \\
+ & cumulative oil production, fracture $Q^o_f$                           & 1  & minmax \\
+ & cumulative oil production, matrix $Q^o_m$                             & 1  & minmax \\
+ & total water cut $\eta$                                                & 1  & minmax \\
+ & water cut, fracture $\eta_f$                                          & 1  & minmax \\
+ & water cut, matrix $\eta_m$                                            & 1  & minmax \\
+ & total recovery factor $R$                                             & 1  & minmax \\
+ & recovery factor, fracture $R_f$                                       & 1  & minmax \\
+ & recovery factor, matrix $R_m$                                         & 1  & minmax \\
+ & mass-balance indicator, fracture $D_S$                                & 1  & zscore \\
+ & mass-balance indicator, matrix $D_Q$                                  & 1  & zscore \\
+\midrule
+\multirow{5}{*}{static}
+ & fluid properties (oil, water, gas)                                    & 19 & minmax \\
+ & reservoir geometry and compressibility                                & 9  & minmax \\
+ & well operating regime and rheological closure                         & 10 & minmax \\
+ & time-stepping parameters of the solver                                & 7  & none \\
+ & grid resolution, regime flags, and saturation cutoff thresholds       & 12 & none \\
+\midrule
+\multirow{5}{*}{layers ($\times 5$)}
+ & layer thickness and vertical discretization                           & 2  & minmax \\
+ & fracture and matrix porosities                                        & 2  & minmax \\
+ & irreducible and maximum water saturations                             & 4  & minmax \\
+ & fracture and matrix absolute permeabilities                           & 2  & log\_minmax \\
+ & inflow regime flags                                                   & 2  & none \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+\section{Generator Architectures}
+\label{sec:method_generators}
+
+The first experimental contrast requires three super-resolution generators of different depth and parameter count that share the same training regime, so that the effect of capacity on the point-wise reconstruction error can be isolated. The third contrast additionally requires that one of the generators admit a conditional configuration in which the vector $\mathbf{z}$ enters the computation.
+
+
+\subsection{Common Design}
+\label{subsec:method_generators_common}
+
+All three generators implement the same input-output interface introduced in the problem formulation: they receive the coarse-grid snapshot $X^{LR}$ together with the optional condition vector $\mathbf{z}$ and produce the fine-grid estimate $\widehat{X}^{HR}$. When the network is unconditional, the second argument is ignored.
+
+The three architectures share a common pipeline of five stages, summarised in the following diagram:
+\begin{multline}
+    X^{LR} \xrightarrow{\mathcal{H}} F_0 \xrightarrow{\mathcal{B}} F_B \xrightarrow{\mathcal{C}} F_B' \\
+    \xrightarrow{+ F_0} F \xrightarrow{\mathcal{U}} G \xrightarrow{\mathcal{T}} \widehat{X}^{HR}.
+    \label{eq:generator_pipeline}
+\end{multline}
+The head $\mathcal{H}$ is a single $3 \times 3$ convolution that lifts the three input channels into a feature tensor $F_0$ of fixed width $C_f$ at the low-resolution spatial size. The body $\mathcal{B}$ is a stack of repeated building blocks that processes the feature tensor at the same width $C_f$ and at the same low-resolution spatial size. The body tail convolution $\mathcal{C}$ is a single $3 \times 3$ convolution applied to the body output. The long skip connection adds $F_0$ to the output of $\mathcal{C}$, so the body and its tail convolution learn the residual not captured by the head alone. The upsampling tail $\mathcal{U}$ raises the spatial resolution by the factor $s$ of the problem formulation and keeps the feature width at $C_f$. The output projection $\mathcal{T}$ is a single $3 \times 3$ convolution that maps the upsampled features back into the three output channels of $\widehat{X}^{HR}$. The three generators differ in the composition of the body $\mathcal{B}$, while sharing the same head $\mathcal{H}$, body tail convolution $\mathcal{C}$, long skip connection, upsampling tail $\mathcal{U}$, and output projection $\mathcal{T}$.
+
+The pipeline of Equation~(\ref{eq:generator_pipeline}) realises the post-upsampling pattern introduced by Shi et al.~\cite{shi2016real} and discussed in Section~\ref{subsec:dl_foundations}. All convolutions of the head, the body, and the body tail operate on feature tensors at the coarse-grid spatial size $h \times w$. Only the upsampling tail $\mathcal{U}$ and the output projection $\mathcal{T}$ act on tensors at the fine-grid spatial size $H \times W = s h \times s w$. This placement keeps the most expensive convolutions on the smaller feature maps and concentrates the resolution increase in the sub-pixel convolution layers of the tail.
+
+The upsampling tail is implemented through sub-pixel convolution rather than through a fixed interpolation kernel or through transposed convolution. A sub-pixel convolution stage that increases the spatial resolution by a factor of two consists of a $3 \times 3$ convolution that maps a feature tensor of width $C_f$ at low resolution into a tensor of width $4 C_f$ at the same low resolution, followed by a pixel-shuffle operator that rearranges these $4 C_f$ channels into $C_f$ channels at twice the spatial resolution. The pixel-shuffle operator is a deterministic permutation of tensor elements with no trainable parameters; the learnable part of the upsampling stage is concentrated in the preceding convolution, which can therefore learn the high-frequency content of the upsampled output. For an upsampling factor $s = 4$ the tail applies two such stages in sequence. The information that the network has to recover is high-frequency by construction: the displacement fronts and the fine-scale heterogeneities that the coarse-grid simulation does not resolve carry energy at spatial frequencies above the coarse-grid Nyquist limit, and any fixed interpolation kernel is a low-pass filter that suppresses this high-frequency content. Sub-pixel convolution learns the upsampling operator from data rather than fixing a predetermined frequency response, and avoids the checkerboard artefacts of transposed convolution at strides greater than one.
+
+None of the three generators uses Batch Normalization. Batch normalisation removes the per-sample intensity and contrast information present in the feature maps, which conflicts with the requirements of super-resolution reconstruction, as discussed for the EDSR family by Lim et al.~\cite{lim2017enhanced} in Section~\ref{subsec:dl_foundations}.
+
+
+\subsection{MSRResNet}
+\label{subsec:method_generators_srresnet}
+
+The MSRResNet generator instantiates the common skeleton of Equation~(\ref{eq:generator_pipeline}) with a body composed of a stack of identical residual blocks. Each residual block has the structure
+\begin{equation}
+    x_{i+1} = x_i + \lambda \cdot \mathrm{Conv}_{3 \times 3}\!\bigl( \mathrm{ReLU}\bigl( \mathrm{Conv}_{3 \times 3}(x_i) \bigr) \bigr),
+    \label{eq:srresnet_block}
+\end{equation}
+where both convolutions operate at the body width $C_f$ and $\lambda \in (0, 1)$ is a constant residual-scaling factor that stabilises the optimisation of the residual stack. No normalisation layer is used inside the block. The body of the generator is the composition of $N_B^{\mathrm{MSR}}$ such blocks. The upsampling tail follows the structure of the common skeleton but, in contrast to the other two generators, inserts a ReLU non-linearity after each pixel-shuffle operator. The generator is unconditional.
+
+
+\subsection{EDSR}
+\label{subsec:method_generators_edsr}
+
+The EDSR generator instantiates the common skeleton with a body that uses the same residual block as MSRResNet, defined by Equation~(\ref{eq:srresnet_block}), and the same body width $C_f$ and residual-scaling factor $\lambda$. The body depth $N_B^{\mathrm{EDSR}}$ is chosen larger than $N_B^{\mathrm{MSR}}$, so that the two generators differ in body depth while sharing every other component of the skeleton. The upsampling tail uses sub-pixel convolution as in the common skeleton but does not apply a non-linearity after the pixel-shuffle operators.
+
+The EDSR generator is used in two configurations. The unconditional configuration ignores $\mathbf{z}$ and trains the backbone of Equation~(\ref{eq:generator_pipeline}) on the LR input alone, in the same regime as MSRResNet but with a deeper body. The conditional configuration injects $\mathbf{z}$ into every residual block of the body through the feature-wise linear modulation path described below. Both configurations share the backbone, the body depth $N_B^{\mathrm{EDSR}}$, the body width $C_f$, and the residual-scaling factor $\lambda$, and are trained independently from random initialization, so that the comparison between them measures the effect of the conditioning path on the reconstruction quality.
+
+In the conditional configuration the condition vector $\mathbf{z}$ enters the body through a feature-wise linear modulation~\cite{perez2018film}, in the form introduced in Section~\ref{subsec:conditioning}. The vector $\mathbf{z}$ is first mapped to a fixed-size embedding $\mathbf{e}$ by a two-layer fully-connected encoder
+\begin{equation}
+    \mathbf{e} = W_2 \, \mathrm{ReLU}\!\bigl( W_1 \mathbf{z} \bigr),
+    \label{eq:film_encoder}
+\end{equation}
+where $W_1$ and $W_2$ are the encoder weights, with biases omitted for brevity. The encoder makes the rest of the modulation path independent of the dimension of $\mathbf{z}$ under the different configurations of Table~\ref{tab:condition_vector}: only the input layer $W_1$ depends on the dimension $d$ of the condition vector, while every subsequent operation acts on the fixed-size embedding $\mathbf{e}$.
+
+A linear projection then maps $\mathbf{e}$ into one pair of channel-wise modulation parameters $(\gamma_i, \beta_i) \in \mathbb{R}^{C_f} \times \mathbb{R}^{C_f}$ per residual block of the body, so that block $i$ receives its own pair. Inside the $i$-th block the modulation is applied to the output of the second convolution before the residual scaling and the skip connection, and Equation~(\ref{eq:srresnet_block}) is replaced by
+\begin{equation}
+    x_{i+1} = x_i + \lambda \cdot \bigl( \gamma_i \odot f_i(x_i) + \beta_i \bigr),
+    \label{eq:film_block}
+\end{equation}
+where $f_i(x_i) = \mathrm{Conv}_{3 \times 3}( \mathrm{ReLU}(\mathrm{Conv}_{3 \times 3}(x_i)) )$ is the two-convolution stack of the block and $\odot$ denotes the channel-wise product. The modulation acts on the residual contribution of the block and does not enter the skip path, so the global structure of the body and the long skip connection are preserved.
+
+The linear projection from the embedding to the modulation parameters is initialised so that $\gamma_i = \mathbf{1}$ and $\beta_i = \mathbf{0}$ for every block at the start of training. Equation~(\ref{eq:film_block}) then reduces to Equation~(\ref{eq:srresnet_block}) on the first training step, and the modulation path acts as the identity on the residual stream. Together with the deterministic seeding of all other components of the network, this initialisation guarantees that the unconditional and the conditional configurations of the EDSR generator produce identical outputs at the start of training, so the third experimental contrast measures the contribution of $\mathbf{z}$ to the reconstruction quality.
+
+
+\subsection{Residual Feature Distillation Network}
+\label{subsec:method_generators_rfdn}
+
+The Residual Feature Distillation Network (RFDN)~\cite{liu2020rfdn}, introduced in Section~\ref{subsec:dl_foundations}, instantiates the common skeleton with a body composed of residual feature distillation blocks at a smaller body width $C_f^{\mathrm{RFDN}} < C_f$ than MSRResNet and EDSR.
+
+The residual feature distillation block has an internal structure with two interleaved paths. Let $x$ denote the input to the block, with channel dimension $C_f^{\mathrm{RFDN}}$. The block produces three intermediate refinement tensors $r_1, r_2, r_3$ at the same channel dimension as $x$ through the recurrence
+\begin{equation}
+    r_k = \mathrm{LeakyReLU}\!\bigl( \mathrm{Conv}_{3 \times 3}( r_{k-1} ) + r_{k-1} \bigr), \quad k = 1, 2, 3, \quad r_0 = x,
+    \label{eq:rfdb_refine}
+\end{equation}
+and four distillation tensors $d_1, d_2, d_3, d_4$ at a reduced channel dimension $C_d = C_f^{\mathrm{RFDN}} / 2$ through
+\begin{equation}
+\begin{aligned}
+    d_k &= \mathrm{LeakyReLU}\!\bigl( \mathrm{Conv}_{1 \times 1}( r_{k-1} ) \bigr), \quad k = 1, 2, 3, \\
+    d_4 &= \mathrm{LeakyReLU}\!\bigl( \mathrm{Conv}_{3 \times 3}( r_3 ) \bigr).
+\end{aligned}
+\label{eq:rfdb_distill}
+\end{equation}
+The first three distillation tensors are compact $1 \times 1$ projections of the successive refinement tensors, and the last is a $3 \times 3$ projection of the deepest. The four distillation tensors are concatenated along the channel axis and fused by a $1 \times 1$ convolution into a tensor of the original channel dimension $C_f^{\mathrm{RFDN}}$, which is then passed through a spatial attention sub-network that computes a per-pixel attention map and re-weights the input features. The output of the block is the sum of the attention-weighted tensor and the block input $x$.
+
+The outputs of all body blocks are fused into a single feature tensor before the body tail convolution: the outputs of the $N_B^{\mathrm{RFDN}}$ blocks are concatenated along the channel axis and a $1 \times 1$ convolution reduces the channel dimension back to $C_f^{\mathrm{RFDN}}$. This fused tensor is the $F_B$ of Equation~(\ref{eq:generator_pipeline}); it is then passed through the body tail convolution $\mathcal{C}$ and added to the head output through the long skip connection, so that the head, the long skip connection, the upsampling tail, and the output projection of the common skeleton are inherited unchanged. The upsampling tail uses sub-pixel convolution as in the common skeleton without a non-linearity after the pixel-shuffle operators. The generator is unconditional. It uses fewer body blocks of richer internal structure and has a lower parameter count than MSRResNet and EDSR, contributing a third combination of depth and parameter count to the first experimental contrast.
+
+
+\section{Discriminator}
+\label{sec:method_discriminator}
+
+The second experimental contrast compares the three generators before and after fine-tuning within an adversarial framework. The adversarial training requires a critic that complements the pixel-wise objective with a learning signal sensitive to the high-frequency structure of the reconstruction. The discriminator is used only during the adversarial training of the generators and is discarded after training; it is not part of the inference pipeline of the surrogate model.
+
+The discriminator is a patch-level critic, in the spirit of the discriminators used in adversarial super-resolution~\cite{cvf_srgan}. Rather than emitting a single scalar that classifies the entire snapshot as real or fake, it emits a two-dimensional map of local logits, each classifying a local region of the input. The effective receptive field of every output position covers a patch of the input snapshot, so each output position evaluates the local high-frequency structure of its own patch and the adversarial loss is the average of the per-patch terms. A global critic that returns a single score for the whole snapshot tends to bias the generator towards over-smoothed reconstructions, because its gradient signal rewards low-frequency consistency more strongly than local sharpness.
+
+The input to the discriminator is not the candidate snapshot $X$ itself but the residual
+\begin{equation}
+    R(X, X^{LR}) = X - \mathrm{Bicubic}_{s}(X^{LR}),
+    \label{eq:disc_residual}
+\end{equation}
+where $\mathrm{Bicubic}_{s}(\cdot)$ denotes bicubic interpolation by the upsampling factor $s$ of the problem formulation. Bicubic upsampling of $X^{LR}$ produces a parameter-free, low-pass reference image of the same spatial resolution as $X$. The subtraction in Equation~(\ref{eq:disc_residual}) removes the low-frequency content already present in the reference and concentrates the input of the discriminator on the high-frequency residual that distinguishes a faithful reconstruction from an over-smoothed or hallucinated one. The same transformation is applied to the real samples $X = X^{HR}$ and to the fake samples $X = \widehat{X}^{HR}$, so the discriminator compares the residual signals of the two distributions directly.
+
+Every convolutional layer of the discriminator is constrained by spectral normalization~\cite{miyato2018spectral}, in the form introduced in Section~\ref{subsec:gan_revolution}. Spectral normalization replaces each convolutional weight $W$ by $W / \sigma(W)$, where $\sigma(W)$ is an estimate of the largest singular value of the corresponding linear operator. The Lipschitz constant of each layer is then at most one, and the Lipschitz constant of the discriminator as a whole is controlled, which stabilises the adversarial training and prevents the discriminator from dominating the generator early in the optimisation.
+
+The discriminator is organised around a stem, a body of strided blocks, and a $1 \times 1$ head:
+\begin{multline}
+    R \xrightarrow{\mathcal{S}} F_0 \xrightarrow{\mathcal{D}_1} F_1 \xrightarrow{\mathcal{D}_2} F_2 \;\dots\; \xrightarrow{\mathcal{D}_{N_D}} F_{N_D} 
+    \xrightarrow{\mathcal{P}} \Lambda.
+    \label{eq:disc_pipeline}
+\end{multline}
+The stem $\mathcal{S}$ is a single $3 \times 3$ convolution with stride one that maps the three channels of the residual into a feature tensor of base width $b$, followed by a leaky rectified linear non-linearity. The body is a stack of $N_D$ strided blocks $\mathcal{D}_1, \dots, \mathcal{D}_{N_D}$. Each block consists of a $3 \times 3$ convolution with stride two that halves the spatial dimensions and doubles the channel dimension up to a cap $C_{\max}$, a leaky rectified linear non-linearity, a $3 \times 3$ convolution with stride one that preserves the channel dimension, and a second leaky rectified linear non-linearity. Across the body the spatial dimensions are reduced by a factor of $2^{N_D}$, while the channel dimension doubles at each block up to $C_{\max}$. The head $\mathcal{P}$ is a single $1 \times 1$ convolution without non-linearity that projects every spatial position of $F_{N_D}$ to a single logit, producing a two-dimensional map of patch logits $\Lambda$. The output of the discriminator is the full map $\Lambda$ rather than its global mean, so every spatial position contributes independently to the adversarial objective.
+
+
+\section{Loss Functions}
+\label{sec:method_losses}
+
+The generators are trained against two distinct objectives, depending on the experimental contrast in which they participate. A pixel-wise regression objective fits the generators to the high-resolution targets; it is the only objective used to train the conditional configuration of the EDSR generator. A composite objective adds a domain-specific perceptual term, an optional reservoir-physics regularization, and an adversarial term computed from the discriminator; it is used in the adversarial fine-tuning that underlies the second experimental contrast.
+
+
+\subsection{Regression Objective}
+\label{subsec:method_loss_regression}
+
+The pixel-wise discrepancy between the reconstruction $\widehat{X}^{HR}$ and the target $X^{HR}$ is measured by the $L_1$ norm. Following Mathieu et al.~\cite{mathieu2016deep} and the analysis of point-wise metrics in Section~\ref{sec:metrics}, the $L_1$ norm is preferred over the $L_2$ norm because it is more robust to the sharp transitions at the displacement fronts of the saturation channels and yields less smoothed reconstructions. The regression objective is therefore
+\begin{equation}
+    \mathcal{L}_{\mathrm{px}}\!\bigl(\widehat{X}^{HR}, X^{HR}\bigr) = \frac{1}{C \, H \, W} \, \bigl\| \widehat{X}^{HR} - X^{HR} \bigr\|_{1},
+    \label{eq:loss_pixel}
+\end{equation}
+where $C$, $H$, $W$ are the channel and spatial dimensions of the reconstruction and $\|\cdot\|_{1}$ denotes the entry-wise $L_1$ norm.
+
+The regression objective is used as a stand-alone training criterion for the conditional configuration of the EDSR generator. The three unconditional generators are trained with both the regression objective and the composite objective defined below.
+
+
+\subsection{Composite Objective}
+\label{subsec:method_loss_adversarial}
+
+The composite objective combines the pixel-wise term of Equation~(\ref{eq:loss_pixel}) with a domain-specific perceptual term, an optional reservoir-physics regularization, and an adversarial term. The generator minimises
+\begin{equation}
+    \mathcal{L}_{G} = \lambda_{\mathrm{px}} \, \mathcal{L}_{\mathrm{px}} + \lambda_{\mathrm{perc}} \, \mathcal{L}_{\mathrm{perc}} + \lambda_{\mathrm{phys}} \, \mathcal{L}_{\mathrm{phys}} + \lambda_{\mathrm{adv}} \, \mathcal{L}_{G,\mathrm{adv}},
+    \label{eq:loss_composite}
+\end{equation}
+where the four non-negative weights $\lambda_{\mathrm{px}}, \lambda_{\mathrm{perc}}, \lambda_{\mathrm{phys}}, \lambda_{\mathrm{adv}}$ control the relative contribution of the four components. The discriminator is trained jointly on its own objective $\mathcal{L}_{D}$, defined below.
+
+The first additional component is a domain-specific perceptual term. The classical perceptual loss introduced by Ledig et al.~\cite{cvf_srgan} and discussed in Section~\ref{subsec:gan_revolution} compares pre-trained convolutional features of the reconstruction and the target in a feature space learned on natural images. Pressure and saturation fields are not natural images, and features extracted by a network trained on photographic data have no physical interpretation here. The perceptual term is therefore replaced by a domain-specific objective on the spatial gradients and the amplitude spectra of the reconstruction and the target. The gradient component is defined through the Sobel operators~\cite{sobel1968isotropic} $\mathbf{S}_x, \mathbf{S}_y$ as
+\begin{equation}
+\begin{aligned}
+    \mathcal{L}_{\mathrm{grad}} = \tfrac{1}{2} \, \Bigl( \, &\bigl\| \mathbf{S}_x \!*\! \widehat{X}^{HR} - \mathbf{S}_x \!*\! X^{HR} \bigr\|_{1} \\
+    + \, &\bigl\| \mathbf{S}_y \!*\! \widehat{X}^{HR} - \mathbf{S}_y \!*\! X^{HR} \bigr\|_{1} \Bigr),
+\end{aligned}
+\label{eq:loss_grad}
+\end{equation}
+where $*$ denotes channel-wise convolution. The spectral component compares the amplitude spectra of the reconstruction and the target through the unitary two-dimensional discrete Fourier transform $\mathcal{F}$:
+\begin{equation}
+    \mathcal{L}_{\mathrm{spec}} = \bigl\| \, |\mathcal{F}(\widehat{X}^{HR})| - |\mathcal{F}(X^{HR})| \, \bigr\|_{1},
+    \label{eq:loss_spec}
+\end{equation}
+where $|\cdot|$ denotes the entry-wise magnitude. The full domain-specific perceptual term is the weighted sum
+\begin{equation}
+    \mathcal{L}_{\mathrm{perc}} = w_{g} \, \mathcal{L}_{\mathrm{grad}} + w_{s} \, \mathcal{L}_{\mathrm{spec}}.
+    \label{eq:loss_perc}
+\end{equation}
+The gradient component penalises misalignment of the displacement fronts, and the spectral component penalises mismatch of the energy distribution across spatial frequencies, including the high frequencies that the pixel-wise term weakly constrains.
+
+The second additional component is a regularization term that injects two priors from the dual-porosity formulation of Section~\ref{sec:theoretical_foundations}: spatial smoothness of the pressure field, and consistency of the saturation fronts. It is the weighted sum
+\begin{equation}
+    \mathcal{L}_{\mathrm{phys}} = w_{p} \, \mathcal{L}_{\mathrm{smooth}}(\widehat{P}) + w_{e} \, \mathcal{L}_{\mathrm{edge}}\!\bigl(\widehat{S}, \widehat{\bar{S}}, S, \bar{S}\bigr).
+    \label{eq:loss_phys}
+\end{equation}
+The smoothness penalty applies a $5$-point discrete Laplacian $\Delta_h$ to the reconstructed pressure channel and penalises its absolute value:
+\begin{equation}
+    \mathcal{L}_{\mathrm{smooth}}(\widehat{P}) = \bigl\| \Delta_h \widehat{P} \bigr\|_{1}.
+    \label{eq:loss_smooth}
+\end{equation}
+The penalty reflects the parabolic character of the pressure equation~(\ref{eq:fpor_pressure}), whose solutions are smooth away from the well, and discourages spurious high-frequency oscillations in the reconstructed pressure field. The edge-consistency penalty compares the magnitudes of the Sobel gradients of the reconstructed and target saturation channels:
+\begin{equation}
+    \mathcal{L}_{\mathrm{edge}} = \tfrac{1}{2} \sum_{c \in \{S, \bar{S}\}} \bigl\| \, |\nabla \widehat{c}| - |\nabla c| \, \bigr\|_{1},
+    \label{eq:loss_edge}
+\end{equation}
+where $|\nabla c|$ denotes the magnitude of the Sobel gradient of channel $c$. Comparing the magnitudes rather than the gradient vectors themselves preserves the location and the sharpness of the saturation fronts while tolerating small pixel-level misalignments. The regularization term $\mathcal{L}_{\mathrm{phys}}$ is included in the composite objective when $\lambda_{\mathrm{phys}} > 0$.
+
+The third additional component is the adversarial term, computed from the discriminator $D$ in the relativistic average formulation of Jolicoeur-Martineau~\cite{jolicoeur2018relativistic} discussed in Section~\ref{subsec:gan_revolution}. The discriminator estimates whether a real sample is more realistic than the average fake sample, and conversely for fake samples. The relativistic logits are
+\begin{equation}
+\begin{aligned}
+    \widetilde{D}(X^{HR}, \widehat{X}^{HR}) &= D\!\bigl(X^{HR}\bigr) - \mathbb{E}_{\widehat{X}^{HR}} D\!\bigl(\widehat{X}^{HR}\bigr), \\
+    \widetilde{D}(\widehat{X}^{HR}, X^{HR}) &= D\!\bigl(\widehat{X}^{HR}\bigr) - \mathbb{E}_{X^{HR}} D\!\bigl(X^{HR}\bigr),
+\end{aligned}
+\label{eq:loss_ragan_logits}
+\end{equation}
+where the expectations are estimated by the mean over the current mini-batch. The adversarial objective of the generator is the symmetric binary cross-entropy
+\begin{equation}
+\begin{aligned}
+    \mathcal{L}_{G,\mathrm{adv}} = \tfrac{1}{2} \, \Bigl( \, &\mathrm{BCE}\!\bigl(\widetilde{D}(X^{HR}, \widehat{X}^{HR}), 0\bigr) \\
+    + \, &\mathrm{BCE}\!\bigl(\widetilde{D}(\widehat{X}^{HR}, X^{HR}), y_{r}\bigr) \, \Bigr),
+\end{aligned}
+\label{eq:loss_g_adv}
+\end{equation}
+and the discriminator minimises the symmetric counterpart
+\begin{equation}
+\begin{aligned}
+    \mathcal{L}_{D} = \tfrac{1}{2} \, \Bigl( \, &\mathrm{BCE}\!\bigl(\widetilde{D}(X^{HR}, \widehat{X}^{HR}), y_{r}\bigr) \\
+    + \, &\mathrm{BCE}\!\bigl(\widetilde{D}(\widehat{X}^{HR}, X^{HR}), 0\bigr) \, \Bigr),
+\end{aligned}
+\label{eq:loss_d}
+\end{equation}
+where $\mathrm{BCE}(z, y) = -\, y \log \sigma(z) - (1 - y) \log\bigl(1 - \sigma(z)\bigr)$ is the binary cross-entropy with logits and $\sigma$ is the logistic function. The target $y_{r} \in (0, 1)$ implements one-sided label smoothing: training the discriminator against a soft target $y_{r} < 1$ instead of a hard target of one slows its convergence and stabilises the adversarial dynamics.
+
+The four weights $\lambda_{\mathrm{px}}, \lambda_{\mathrm{perc}}, \lambda_{\mathrm{phys}}, \lambda_{\mathrm{adv}}$ of Equation~(\ref{eq:loss_composite}), together with the two pairs $(w_{g}, w_{s})$ and $(w_{p}, w_{e})$ of Equations~(\ref{eq:loss_perc}) and~(\ref{eq:loss_phys}), are non-negative scalars that balance the four components against each other. The specific values used in each experiment are stated together with the experiment; they are selected to preserve the pixel fidelity reached by the regression objective while admitting the additional terms, and to keep the discriminator-generator dynamics stable during training.
