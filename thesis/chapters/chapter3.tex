@@ -322,3 +322,64 @@ and the discriminator minimises the symmetric counterpart
 where $\mathrm{BCE}(z, y) = -\, y \log \sigma(z) - (1 - y) \log\bigl(1 - \sigma(z)\bigr)$ is the binary cross-entropy with logits and $\sigma$ is the logistic function. The target $y_{r} \in (0, 1)$ implements one-sided label smoothing: training the discriminator against a soft target $y_{r} < 1$ instead of a hard target of one slows its convergence and stabilises the adversarial dynamics.
 
 The four weights $\lambda_{\mathrm{px}}, \lambda_{\mathrm{perc}}, \lambda_{\mathrm{phys}}, \lambda_{\mathrm{adv}}$ of Equation~(\ref{eq:loss_composite}), together with the two pairs $(w_{g}, w_{s})$ and $(w_{p}, w_{e})$ of Equations~(\ref{eq:loss_perc}) and~(\ref{eq:loss_phys}), are non-negative scalars that balance the four components against each other. The specific values used in each experiment are stated together with the experiment; they are selected to preserve the pixel fidelity reached by the regression objective while admitting the additional terms, and to keep the discriminator-generator dynamics stable during training.
+
+\section{Training Strategy}
+\label{sec:method_training}
+
+The three experimental contrasts of this chapter divide the training into two stages. The regression stage trains every generator with the pixel-wise objective $\mathcal{L}_{\mathrm{px}}$ and produces the weights evaluated in the first and the third contrast. The adversarial stage fine-tunes the three unconditional generators with the composite objective $\mathcal{L}_G$ and produces the weights evaluated in the second contrast. The conditional configuration of the EDSR generator does not enter the adversarial stage: its evaluation against the unconditional configuration of the same backbone is conducted at the end of the regression stage.
+
+
+\subsection{Regression Stage}
+\label{subsec:method_training_regression}
+
+The regression stage produces four training runs: MSRResNet, the unconditional and the conditional EDSR generators, and RFDN. All four runs minimise the pixel-wise objective $\mathcal{L}_{\mathrm{px}}$ of Equation~(\ref{eq:loss_pixel}) under a single optimisation regime, and differ only in the generator architecture and, for the conditional EDSR generator, in the presence of the condition vector $\mathbf{z}$ at the input.
+
+Parameters are updated by AdamW with constant weight decay. The learning rate follows a cosine annealing schedule from an initial value $\eta_0$ to a floor $\eta_{\min}$ over the full duration of the stage. Gradients are clipped by their global $L_2$ norm before every update.
+
+An exponential moving average of the generator weights is maintained throughout the stage and is updated after every parameter step of the underlying generator by
+\begin{equation}
+    \theta^{\mathrm{EMA}}_{t+1} = \alpha \, \theta^{\mathrm{EMA}}_{t} + (1 - \alpha) \, \theta_{t+1},
+    \label{eq:ema_update}
+\end{equation}
+where $\theta_t$ are the instantaneous parameters at training step $t$ and $\alpha \in (0, 1)$ is a fixed decay factor. Validation, checkpoint selection, and the construction of the final exported model use the moving-average copy rather than the instantaneous one, because the moving-average parameters are less sensitive to mini-batch noise and produce smoother validation curves.
+
+For the conditional configuration of the EDSR generator the regression stage is the final training stage, and the resulting moving-average weights are the weights evaluated in the third experimental contrast. For the three unconditional generators the regression stage produces the initial weights of the adversarial stage.
+
+
+\subsection{Adversarial Stage}
+\label{subsec:method_training_adversarial}
+
+The adversarial stage fine-tunes each of the three unconditional generators under the composite objective $\mathcal{L}_G$ of Equation~(\ref{eq:loss_composite}) and the discriminator objective $\mathcal{L}_D$ of Equation~(\ref{eq:loss_d}). The stage is run once per backbone, so three independent adversarial runs are produced.
+
+The generator is initialised from the best regression-stage checkpoint of the same backbone. The discriminator is initialised from random weights. The two networks are updated alternately on every training batch, the discriminator first, the generator second.
+
+Both networks are optimised with Adam, each with its own optimiser and cosine annealing schedule, from initial learning rates $\eta_G^{0}$ or $\eta_D^{0}$ to the floor $\eta_{\min}$. The discriminator is given a larger initial learning rate than the generator, $\eta_D^{0} > \eta_G^{0}$, following the two time-scale update rule: the generator starts from a regression-stage solution, while the discriminator starts from a random initialisation, and the larger learning rate compensates for the longer adaptation path of the discriminator. Gradients of each network are clipped by their global $L_2$ norm before every update, with a clip value set separately from the regression stage.
+
+The adversarial stage starts with a two-phase warmup that prepares the generator and the discriminator before the full composite objective is activated. During the first $N_D^{\mathrm{w}}$ epochs only the discriminator is updated; the generator parameters are held fixed, and the discriminator alone is trained on the residual input of Equation~(\ref{eq:disc_residual}), so that it provides a non-trivial classification signal before its gradient enters the generator update. During the next $N_G^{\mathrm{w}}$ epochs the generator is updated against the non-adversarial terms of $\mathcal{L}_G$ with the adversarial weight $\lambda_{\mathrm{adv}}$ held at zero, which lets the generator adjust to the gradients of the perceptual and physics terms before the discriminator-induced gradient is added. Once both warmup phases are complete, $\lambda_{\mathrm{adv}}$ is set to its target value and every subsequent update uses the full composite objective.
+
+Two further mechanisms stabilise the dynamics inside the adversarial phase. The first is an adaptive update rule for the discriminator: when the discriminator loss falls below a threshold $\tau_D$, the discriminator step is skipped on the current batch and only the generator step is performed, so that the discriminator is not optimised further on batches it already classifies well. A periodic refresh overrides this rule at fixed epoch intervals and forces a discriminator update, so that the discriminator parameters keep pace with the generator output as the generator continues to improve. The second mechanism is additive Gaussian noise applied to the inputs of the discriminator, with the same standard deviation on the real and on the fake samples, and linearly annealed to zero over a prescribed number of epochs. The noise softens the classification problem in the early epochs of the adversarial stage, when the residuals of the generator output and of the high-resolution targets follow different distributions.
+
+An exponential moving average of the generator weights is maintained throughout the adversarial stage in the form of Equation~(\ref{eq:ema_update}), with a decay factor that can be set independently of the one used in the regression stage. The discriminator is not averaged. Validation and checkpoint selection use the moving-average copy, as in the regression stage. The moving-average weights at the end of the adversarial stage are the weights of each unconditional generator evaluated in the second experimental contrast.
+
+\section{Evaluation Protocol}
+\label{sec:method_evaluation}
+
+All trained generators are evaluated against the fixed suite of metrics formalised in the literature review in Section~\ref{sec:metrics}, summarised in Table~\ref{tab:metric_suite} in decreasing order of priority. Equation references point to the literature review. PSNR is reported as the mean across the three physical channels $P$, $S$, $\bar{S}$; SSIM, GMAE, ERGAS, and SAM are global quantities, with SAM expressed in radians. An experiment satisfies the acceptance criteria if its scores on the first four metrics reach their respective acceptance bounds on the held-out test subset; the SAM bound is a diagnostic of inter-channel coupling and does not enter the acceptance decision. The channel-resolved values of PSNR and MAE for $P$, $S$, $\bar{S}$ are also reported, without acceptance bounds, to expose the asymmetry of the reconstruction across the three channels.
+
+\begin{table}[h]
+\centering
+\caption{Evaluation suite.}
+\label{tab:metric_suite}
+\small
+\begin{tabular}{l c c l}
+\toprule
+Metric & Equation & Direction & Acceptance bound \\
+\midrule
+PSNR  & (\ref{eq:psnr})  & $\uparrow$   & $\geq 30$    \\
+SSIM  & (\ref{eq:ssim})  & $\uparrow$   & $\geq 0.88$  \\
+GMAE  & (\ref{eq:gmae})  & $\downarrow$ & $\leq 0.030$ \\
+ERGAS & (\ref{eq:ergas}) & $\downarrow$ & $\leq 6.0$   \\
+SAM   & (\ref{eq:sam})   & $\downarrow$ & $\leq 0.15$  \\
+\bottomrule
+\end{tabular}
+\end{table}

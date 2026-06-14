@@ -75,10 +75,12 @@ The Mean Absolute Error and the Mean Squared Error are the two basic point-wise 
 \begin{equation}
     \text{MAE}(X, Y) = \frac{1}{N} \sum_{i=1}^{N} |x_i - y_i|, \qquad
     \text{MSE}(X, Y) = \frac{1}{N} \sum_{i=1}^{N} (x_i - y_i)^2.
+    \label{eq:mae_mse}
 \end{equation}
 Mathieu et al.~\cite{mathieu2016deep} argued that MSE is biased towards spatially averaged solutions, and that MAE, being less sensitive to large outliers, tends to preserve edges better in dense prediction tasks. The Peak Signal-to-Noise Ratio rewrites MSE on a logarithmic scale relative to the dynamic range of the reference signal~\cite{gonzalez2018digital}:
 \begin{equation}
     \text{PSNR}(X, Y) = 10 \cdot \log_{10}\!\left(\frac{R(X)^{\,2}}{\text{MSE}(X, Y)}\right),
+    \label{eq:psnr}
 \end{equation}
 where $R(X) = \max(X) - \min(X)$ is the dynamic range of the reference field $X$. The dynamic range adapts the metric to the actual span of values in each channel, which is needed when channels follow different normalization schemes or have different numerical ranges. PSNR is reported per channel and as a channel average. A complementary indicator of robustness is the maximum absolute error, $\max_i |x_i - y_i|$, which characterizes the worst-case point deviation and is sensitive to localized non-physical spikes.
 
@@ -91,20 +93,28 @@ Point-wise metrics describe per-cell deviations but do not capture the geometry 
 with local means $\mu_x, \mu_y$, standard deviations $\sigma_x, \sigma_y$, cross-covariance $\sigma_{xy}$, and small numerical constants $C_1, C_2, C_3$ that stabilize the division near zero. The composite index used in practice combines luminance and the joint contrast-structure term,
 \begin{equation}
     \text{SSIM}(x, y) = \frac{(2\mu_x\mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)},
+    \label{eq:ssim}
 \end{equation}
 and takes values in $[-1, 1]$, with $1$ corresponding to perfect structural identity. SSIM penalizes the artificial smoothing of sharp fronts and the geometric misalignment of flow barriers more heavily than uniform offsets, which makes it informative for fields that contain narrow displacement structures.
 
 Multi-channel physical states require evaluation criteria that respect the joint structure of the channels. Wald~\cite{wald2002data} introduced the Error Relative Global Adimensional Synthesis (ERGAS) in the context of multispectral image fusion. For a reference field $X$ and a predicted field $Y$ with $C$ channels,
 \begin{equation}
     \text{ERGAS}(X, Y) = 100 \, \frac{h}{l} \, \sqrt{\frac{1}{C} \sum_{c=1}^{C} \frac{\text{MSE}_c}{\mu_c^2}},
+    \label{eq:ergas}
 \end{equation}
 where $h/l$ is the spatial resolution ratio between the high- and low-resolution domains, $\text{MSE}_c$ is the mean squared error of the $c$-th channel, and $\mu_c$ is the mean of the $c$-th reference channel. The per-channel normalization by $\mu_c^2$ makes ERGAS appropriate when channels span different numerical ranges, as for coupled pressure and saturation fields. Kruse et al.~\cite{kruse1993spectral} introduced a complementary criterion, the Spectral Angle Mapper (SAM), which evaluates the preservation of inter-channel relationships by computing the angle between the reference and predicted channel vectors at each spatial location,
 \begin{equation}
     \text{SAM}(x, y) = \arccos\!\left( \frac{\sum_{c=1}^{C} x_c y_c}{\sqrt{\sum_{c=1}^{C} x_c^2} \, \sqrt{\sum_{c=1}^{C} y_c^2}} \right).
+    \label{eq:sam}
 \end{equation}
 A low SAM value indicates that the surrogate model preserves the joint statistics across channels rather than reconstructing them independently. For a dual-porosity formulation, in which pressure, fracture saturation, and matrix saturation are coupled through the inter-porosity exchange term of Section~\ref{sec:theoretical_foundations}, a low SAM corresponds to a reconstruction that respects the coupling and not merely the marginal distribution of each channel.
 
-A separate family of metrics, originating in image restoration, targets the geometry of edges and fronts rather than the global statistics of the field. Spatial gradients computed with the orthogonal Sobel operators~\cite{sobel1968isotropic} approximate these local edge structures, and Mathieu et al.~\cite{mathieu2016deep} formulated image-prediction objectives based directly on such gradients. A gradient-consistency criterion computes the magnitude of the Sobel gradient on both the reference and the reconstructed field and reports the mean absolute difference of the two magnitudes. Unlike MSE, this criterion penalizes the smearing of fronts but tolerates small spatial misalignments, which makes it sensitive to the recovery of front sharpness rather than to absolute front position.
+A separate family of metrics, originating in image restoration, targets the geometry of edges and fronts rather than the global statistics of the field. Spatial gradients computed with the orthogonal Sobel operators~\cite{sobel1968isotropic} approximate these local edge structures, and Mathieu et al.~\cite{mathieu2016deep} formulated image-prediction objectives based directly on such gradients. A gradient-consistency criterion compares the magnitudes of the Sobel gradients of the reference and the reconstructed field:
+\begin{equation}
+    \text{GMAE}(X, Y) = \frac{1}{N} \sum_{i=1}^{N} \bigl| \, |\nabla X|_i - |\nabla Y|_i \, \bigr|,
+    \label{eq:gmae}
+\end{equation}
+where $|\nabla X|$ denotes the per-pixel magnitude of the Sobel gradient of $X$ computed separately for each channel, and the sum runs over all channel–pixel entries with $N$ their total count. Unlike MSE, this criterion penalizes the smearing of fronts but tolerates small spatial misalignments, which makes it sensitive to the recovery of front sharpness rather than to absolute front position.
 
 A further family of criteria embeds physical priors directly into the evaluation. Raissi et al.~\cite{arxiv_raissi_pinns} formalized this idea in the physics-informed neural network framework, where residuals of the governing partial differential equation are used as a training signal that constrains the network output to obey the underlying physics. The same principle applies to evaluation: for diffusive fields governed by parabolic equations, such as the pressure field in the system of Equations~\ref{eq:fpor_pressure}--\ref{eq:fpor_block_sat}, the magnitude of a discrete Laplacian operator on the reconstructed field measures the deviation from the smoothness implied by the governing equation. Combined with the gradient-based criterion above, such physics-aware indicators provide a domain-specific layer of evaluation that complements purely statistical metrics by reporting to what extent a reconstruction departs from properties enforced by the governing equations.
 
