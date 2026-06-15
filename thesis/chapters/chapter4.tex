@@ -1,10 +1,12 @@
 \chapter{Implementation}
 \label{chap:implementation}
 
+This chapter documents how the methodology of Chapter~\ref{chap:methodology} is realised in code. The material is grouped into four parts: the overall architecture, the data generation campaign, the training and export commands, and the desktop tool that runs the trained generator next to the live solver.
+
 \section{Software Stack Overview}
 \label{sec:impl_overview}
 
-The software stack supporting the methodology of Chapter~\ref{chap:methodology} is organised around two regimes of operation, sketched in Figure~\ref{fig:stack_overview}. The offline regime trains the super-resolution generators and exports them for inference. It is implemented as a single command-line service that runs three sequential stages: dataset construction with preprocessing and normalisation, training under PyTorch Lightning with Hydra-based configuration, and ONNX export of the resulting model. All persistent artifacts of the offline regime are stored on the file system: the \texttt{.npz} archives produced by the numerical solver, the normalisation constants \texttt{stats.json} estimated on the training subset, and the exported \texttt{.onnx} model. MLflow runs as an independent observer alongside the training stage and records its metrics, hyperparameters, and intermediate checkpoints. The same numerical solver that generates the training corpus in the offline regime is also used at runtime in the online regime: it streams a coarse-grid snapshot directly to the desktop application, which loads the exported \texttt{.onnx} model and the corresponding \texttt{stats.json} from the file system and performs super-resolution inference for visualisation. The remaining sections of this chapter document the three components of this architecture in turn: the CLI service and its configuration in Section~\ref{sec:impl_training}, the ONNX export and the inference path in Section~\ref{sec:impl_inference}, and the desktop application in Section~\ref{sec:impl_app}.
+Figure~\ref{fig:stack_overview} shows how the components of the software stack supporting the methodology relate to each other. Two regimes share the same numerical solver. An offline training pipeline produces a trained generator ready for inference, and an online desktop application loads it and applies it either to live coarse-grid input from the solver or to stored archives that include fine-grid references for comparison.
 
 \begin{figure}[t]
 \centering
@@ -57,33 +59,27 @@ The software stack supporting the methodology of Chapter~\ref{chap:methodology} 
     arrow_dashed/.style={-{Stealth[length=2mm]}, thick, draw=black!50, dashed},
 ]
 
-% ====================== MLflow (top, cross-cutting) ======================
 \node[external] (mlflow) {MLflow \\ tracking};
 
-% ====================== CLI service: sub-processes ======================
 \node[subprocess, below=14mm of mlflow, xshift=-30mm] (dataset) {Dataset \& \\ preprocessing};
 \node[subprocess, right=of dataset] (training) {Training \\ (Lightning + Hydra)};
 \node[subprocess, right=of training] (export)  {ONNX \\ export};
 
-% ====================== CLI service: container on background layer ======================
 \begin{scope}[on background layer]
     \node[container, fit=(dataset)(training)(export),
           label={[anchor=south west, font=\small\bfseries, blue!50!black, yshift=1mm]north west:CLI service}]
           (cli) {};
 \end{scope}
 
-% ====================== File system (storage) ======================
 \node[storage, below=14mm of training] (fs) {File system};
 
 \node[artifact, below=2mm of fs.south, xshift=-22mm] (npz)   {\texttt{.npz} archives};
 \node[artifact, below=2mm of fs.south]               (stats) {\texttt{stats.json}};
 \node[artifact, below=2mm of fs.south, xshift=22mm]  (onnx)  {\texttt{.onnx} model};
 
-% ====================== Numerical solver and Desktop app ======================
 \node[process, below=22mm of fs, xshift=-38mm] (solver) {Numerical \\ solver};
 \node[final,   below=22mm of fs, xshift=38mm]  (app)    {Desktop application \\ (PySide6 + ONNX Runtime)};
 
-% ====================== Arrows: CLI ↔ FS ======================
 \draw[arrow] (dataset.south) -- ++(0,-4mm) -| (fs.north west)
     node[pos=0.25, below, font=\footnotesize] {read};
 \draw[arrow] (training.south) -- (fs.north)
@@ -91,24 +87,19 @@ The software stack supporting the methodology of Chapter~\ref{chap:methodology} 
 \draw[arrow] (export.south) -- ++(0,-4mm) -| (fs.north east)
     node[pos=0.25, below, font=\footnotesize, xshift=-2mm] {read/write};
 
-% ====================== Arrows: solver → FS (offline) ======================
 \draw[arrow] (solver.north) -- ++(0,4mm) -| (npz.south)
     node[pos=0.25, above, font=\footnotesize, xshift=-3mm] {LR + HR pairs};
 
-% ====================== Arrows: FS → app (load model + stats) ======================
 \draw[arrow] (onnx.south) -- ++(0,-4mm) -| (app.north)
     node[pos=0.25, above, font=\footnotesize] {load};
 
-% ====================== Arrows: solver → app (online runtime) ======================
 \draw[arrow] (solver.east) -- (app.west)
     node[midway, above, font=\footnotesize] {LR stream}
     node[midway, below, font=\footnotesize\itshape] {online};
 
-% ====================== MLflow as cross-cutting ======================
 \draw[arrow_dashed] (training.north) -- (mlflow.south)
     node[midway, right, font=\footnotesize] {metrics, artifacts};
 
-% ====================== Mode labels ======================
 \node[anchor=south, gray!60!black, font=\footnotesize\itshape]
     at ([yshift=-1mm, xshift=6mm]solver.north) {offline};
 
@@ -117,18 +108,113 @@ The software stack supporting the methodology of Chapter~\ref{chap:methodology} 
 \label{fig:stack_overview}
 \end{figure}
 
+A standalone C\#\ service implements the dual-porosity solver and answers requests through gRPC, a remote-procedure-call protocol that carries Protocol Buffers messages over HTTP/2 and lets the C\#\ and Python sides of the project remain independent. During data generation the service runs paired low-resolution and high-resolution simulations on demand and writes each pair, along with the dynamic and static scalar metadata, into a single \texttt{.npz} archive. At runtime it streams the current state of an interactive simulation to the desktop client through the same connection.
+
+Two command-line entry points orchestrate the offline workflow. Both are wired through Hydra, a Python configuration library that builds one runtime object from a hierarchy of YAML files and overrides given at the command line. The first entry point handles dataset assembly, training, and metric reporting. Training runs under PyTorch Lightning, an opinionated wrapper around PyTorch that pins down the boundary between the network and its loss on one side, and the device placement, checkpoint serialisation and validation hooks on the other. Dataset assembly walks the archive directory, splits the archives deterministically into training, validation, and test subsets, computes per-channel normalisation constants from the training split, and writes them to \texttt{stats.json}. The fitting loop consumes the normalised tensors and emits Lightning checkpoints onto disk. MLflow attaches to the same loop as an observer and stores scalar metrics, hyperparameter values and intermediate weights of each run; the training code does not depend on MLflow being reachable.
+
+A separate export entry point loads a stored checkpoint together with the normalisation constants, rebuilds the generator from the architecture description embedded in the checkpoint, and emits a single file in the ONNX format. ONNX is a vendor-neutral interchange format for neural-network computation graphs. The export step ends with a side-by-side numerical run of the original PyTorch graph and the exported version to catch divergence introduced by the conversion.
+
+PySide6, the Python bindings for the Qt widget toolkit, hosts the online application. ONNX Runtime, an inference library that executes ONNX graphs on CPU or GPU without pulling in PyTorch as a dependency, handles the forward pass. At startup the application reads the model and the normalisation constants from disk and opens a gRPC channel to the solver. The main window splits horizontally into two top-level tabs, Data and Evaluation, that share a common settings dialog for endpoint, paths and rendering preferences.
+
+Three sub-tabs sit inside the Data tab, sharing a left column with a JSON configuration loader and a playback strip (Start, Pause, Step, step batch, interval). On the Runtime sub-tab the user edits the operational controls of an interactive simulation --- the radial grid size, the well flow rate, the outer-boundary pressure, the wellbore radius, and the near-wellbore oil viscosity --- and watches the result on the canvas to the right. That canvas combines a Maps view, where one of the three physical channels is selected and the user toggles between linear-interpolation rendering and neural reconstruction backed by an ONNX file picked from a drop-down list, and a Metrics view that plots integral indicators against simulated time. Figure~\ref{fig:data_runtime} captures this sub-tab during a live session, with the fracture saturation channel reconstructed by the trained generator from the coarse-grid solver output.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/data_runtime.png}
+\caption{Runtime sub-tab of the Data view with neural super-resolution of the fracture saturation channel.}
+\label{fig:data_runtime}
+\end{figure}
+
+Dataset jobs go through the Simulation generation sub-tab, whose form collects an output directory, a job identifier, the number of time steps, the snapshot stride, the radial resolutions of the low- and high-resolution runs, the fixed time step, and the pressure-solver tolerance. A mode selector switches between a single job and a Latin Hypercube campaign whose parameters are the sample size, the random seed, and the worker count, and a progress bar tracks the queue. A third sub-tab, Simulation run view, opens a stored archive or a folder of archives, lists the recorded shapes of the field and scalar tensors, and lets the user step through the timeline at low or high resolution.
+
+On the Evaluation tab the user studies a trained model against a held-out subset of the dataset. Its left column lets the user pick a model file, a split among train, validation and test, and an individual archive inside that split; a slider then walks through the timesteps of the chosen archive, and an optional batch prefetch precomputes the network output for every step in advance to make timeline scrolling smooth. The right column is a three-by-four grid (Figure~\ref{fig:evaluation}): rows correspond to the three physical channels, and columns show, for each channel, the coarse-grid input, the fine-grid reference, the neural reconstruction, and the absolute difference between the reconstruction and the reference, all with per-channel colour scales adapted to the local value range.
+
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/evaluation.png}
+\caption{Evaluation tab: three-by-four comparison grid of coarse-grid input, fine-grid reference, neural reconstruction, and absolute difference.}
+\label{fig:evaluation}
+\end{figure}
 
 
 
 
 
 
+\section{Data Generation and Training Configuration}
+\label{sec:impl_training}
+
+\subsection{Dataset Generation}
+\label{subsec:impl_dataset}
+
+The dataset is produced by the C\# component of the CLI service of Section~\ref{sec:impl_overview}. Each simulation case is a single job that runs two independent instances of the dual-porosity solver in parallel on two computational grids, with identical physical and operational parameters. The coarse grid (LR) has $50 \times 100$ cells in the radial-vertical section, the fine grid (HR) has $200 \times 400$ cells; the integer scale factor $s = 4$ is applied uniformly along the radial axis and to the layer-wise vertical discretization. The number of layers is fixed at five by the simulator interface. The three field channels recorded at each snapshot are the global pressure $P$, the fracture saturation $S$, and the matrix saturation $\bar{S}$, consistent with the problem formulation of Section~\ref{sec:method_problem}.
+
+Both runs share the same time discretization: each advances for $500$ time steps and emits a snapshot every $5$ steps, which yields $T = 100$ recorded snapshots per archive. A snapshot bundles the three field channels on the corresponding grid together with the dynamic well-response scalars sampled at the same instant; the static parameters of the case and the per-layer petrophysical configuration are recorded once per archive. Each archive is stored as a single \texttt{.npz} file containing the LR and HR field stacks, the per-step dynamic scalars, and the static and per-layer scalar metadata.
+
+The physical and operational parameters of each simulation case are sampled by Latin Hypercube Sampling (Section~\ref{subsec:method_sampling}). The sampling space contains $D = 29$ parameters distributed across the three groups introduced in Section~\ref{subsec:method_sampling}; their complete inventory is given in Table~\ref{tab:dataset_lhs}. The absolute permeabilities of every layer and the solver tolerances \texttt{enb}, \texttt{evb}, \texttt{ent}, \texttt{evt} are sampled on a $\log_{10}$ scale; the remaining parameters are sampled linearly. The number of drainage sub-steps \texttt{n\_dr} is the only integer parameter. Every sampled case is passed through an admissibility filter before being dispatched to the solver; cases that fail the filter are rejected. The campaign produces $N = 100$ accepted archives, for a total of $N \cdot T = 10\,000$ snapshots.
+
+The archives are partitioned at the case level by \texttt{SrDataModule}, which sorts the archive paths deterministically and applies a fixed-seed shuffle before assigning them to the training, validation, and test subsets in the proportions of Section~\ref{subsec:method_sampling}. At training time, frames are produced by \texttt{SrFrameDataset}: each sample corresponds to one (archive, time step) pair and contains the LR and HR field tensors and, when conditioning is active, the condition vector $\mathbf{z}$ assembled from the requested scalar groups. The data loader streams frames in batches of $128$ from $10$ parallel workers; an LRU cache of size $128$ keeps recently loaded archives in memory to amortise the cost of repeated reads.
 
 
+{\renewcommand{\arraystretch}{0.9}
+\setlength{\tabcolsep}{5pt}
+\small
+\linespread{0.9}\selectfont
+\begin{xltabular}{\textwidth}{p{35mm} p{30mm} p{18mm} X}
+\caption{Sampling space of the LHS generation campaign.}
+\label{tab:dataset_lhs} \\
+\toprule
+Parameter & Range & Unit & Physical meaning \\
+\midrule
+\endfirsthead
 
+\multicolumn{4}{c}{\tablename\ \thetable{} -- continued from previous page} \\
+\toprule
+Parameter & Range & Unit & Physical meaning \\
+\midrule
+\endhead
 
+\midrule
+\multicolumn{4}{r}{continued on next page} \\
+\endfoot
 
+\bottomrule
+\endlastfoot
 
+\multicolumn{4}{l}{Well and operational conditions} \\
+\midrule
+\texttt{n\_dr}           & $[8, 20]$                & count            & drainage sub-steps per time step \\
+\texttt{q\_zab}          & $[15, 70]$               & t/day            & target well production rate \\
+\texttt{qq}              & $[120, 480]$             & atm              & amplitude of well pressure drawdown \\
+\texttt{r\_skv}          & $[0.05, 0.35]$           & m                & wellbore radius \\
+\texttt{p32}             & $[90, 210]$              & atm              & pressure at the outer drainage boundary \\
+\texttt{obv\_p}          & $[80, 360]$              & \%               & water-cut threshold for well shutdown \\
+\texttt{mu\_pazp}        & $[4.0, 18.0]$            & mPa$\cdot$s      & oil viscosity in the near-wellbore zone \\
+\texttt{x\_a}            & $[0.7, 1.8]$             & ---              & lower bound of the matrix mobility closure \\
+\texttt{x\_d}            & $[0.05, 0.6]$            & ---              & upper bound of the matrix mobility closure \\
+\texttt{radz0}           & $[3.0, 12.0]$            & $\mu$m           & radius of gas bubble nuclei at the bottomhole \\
+\midrule
 
+\multicolumn{4}{l}{Solver tolerances and time step} \\
+\midrule
+\texttt{dzt}             & $[1.5, 6.0] \times 10^{-3}$ & 1/MPa         & gas compressibility tolerance \\
+\texttt{enb}             & $[10^{-5}, 5 \times 10^{-3}]$ & ---         & lower saturation cutoff in matrix blocks \\
+\texttt{evb}             & $[10^{-5}, 5 \times 10^{-3}]$ & ---         & upper saturation cutoff in matrix blocks \\
+\texttt{ent}             & $[10^{-6}, 10^{-3}]$       & ---             & lower saturation cutoff in fracture network \\
+\texttt{evt}             & $[10^{-5}, 5 \times 10^{-3}]$ & ---         & upper saturation cutoff in fracture network \\
+\midrule
 
+\multicolumn{4}{l}{Per-layer petrophysics} \\
+\midrule
+\texttt{layer\_\{0,1,2,4\}\_akt} & $[0.05, 0.5]$       & Darcy & fracture permeability of high-permeability layers \\
+\texttt{layer\_\{0,1,2,4\}\_akb} & $[0.005, 0.05]$     & Darcy & matrix block permeability of high-permeability layers \\
+\texttt{layer\_3\_akt}           & $[0.01, 0.1]$       & Darcy & fracture permeability of the low-permeability layer \\
+\texttt{layer\_3\_akb}           & $[0.0005, 0.005]$   & Darcy & matrix block permeability of the low-permeability layer \\
+\texttt{layer\_snt\_shift}       & $[-0.15, 0.15]$     & ---   & shift of fracture irreducible water saturation \\
+\texttt{layer\_snb\_shift}       & $[-0.15, 0.15]$     & ---   & shift of matrix-block irreducible water saturation \\
+\texttt{layer\_svt\_shift}       & $[-0.15, 0.15]$     & ---   & shift of fracture maximum water saturation \\
+\texttt{layer\_svb\_shift}       & $[-0.15, 0.15]$     & ---   & shift of matrix-block maximum water saturation \\
 
+\end{xltabular}
+}
