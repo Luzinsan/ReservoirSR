@@ -366,6 +366,8 @@ An exponential moving average of the generator weights is maintained throughout 
 
 All trained generators are evaluated against the fixed suite of metrics formalised in the literature review in Section~\ref{sec:metrics}, summarised in Table~\ref{tab:metric_suite} in decreasing order of priority. Equation references point to the literature review. PSNR is reported as the mean across the three physical channels $P$, $S$, $\bar{S}$; SSIM, GMAE, ERGAS, and SAM are global quantities, with SAM expressed in radians. An experiment satisfies the acceptance criteria if its scores on the first four metrics reach their respective acceptance bounds on the held-out test subset; the SAM bound is a diagnostic of inter-channel coupling and does not enter the acceptance decision. The channel-resolved values of PSNR and MAE for $P$, $S$, $\bar{S}$ are also reported, without acceptance bounds, to expose the asymmetry of the reconstruction across the three channels.
 
+The acceptance bounds of Table~\ref{tab:metric_suite} are tied to the dynamic range of the reconstruction targets defined in the problem formulation. Because the fine-grid fields are smooth almost everywhere outside the displacement fronts, a faithful reconstruction concentrates its point-wise error on a small fraction of the spatial domain, and the bounds on PSNR, GMAE, and ERGAS lie at the level that separates such a reconstruction from one in which the error spreads across the smooth interior. The structural similarity score, in turn, is upper-bounded by the contribution of the sharp transitions at the displacement fronts even when the reconstruction agrees with the target outside them, and the SSIM bound is positioned at the corresponding regime-specific value. A candidate generator is accepted only when its point-wise error stays below the levels appropriate to the physical fields and its local structure around the fronts is preserved.
+
 \begin{table}[h]
 \centering
 \caption{Evaluation suite.}
@@ -375,10 +377,10 @@ All trained generators are evaluated against the fixed suite of metrics formalis
 \toprule
 Metric & Equation & Direction & Acceptance bound \\
 \midrule
-PSNR  & (\ref{eq:psnr})  & $\uparrow$   & $\geq 30$    \\
-SSIM  & (\ref{eq:ssim})  & $\uparrow$   & $\geq 0.88$  \\
-GMAE  & (\ref{eq:gmae})  & $\downarrow$ & $\leq 0.030$ \\
-ERGAS & (\ref{eq:ergas}) & $\downarrow$ & $\leq 6.0$   \\
+PSNR  & (\ref{eq:psnr})  & $\uparrow$   & $\geq 45$    \\
+SSIM  & (\ref{eq:ssim})  & $\uparrow$   & $\geq 0.55$  \\
+GMAE  & (\ref{eq:gmae})  & $\downarrow$ & $\leq 0.002$ \\
+ERGAS & (\ref{eq:ergas}) & $\downarrow$ & $\leq 0.4$   \\
 SAM   & (\ref{eq:sam})   & $\downarrow$ & $\leq 0.15$  \\
 \bottomrule
 \end{tabular}
