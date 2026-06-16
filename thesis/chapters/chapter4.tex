@@ -232,7 +232,7 @@ For the adversarial fine-tune the best checkpoint of the matching regression run
 
 Run-level instrumentation is shared across every experiment. Scalar metrics, hyperparameters and intermediate weights are streamed to an MLflow server during training; a summary line with parameter counts, validation losses and the headline structural and spectral scores is appended to a single CSV report at the end of each run, together with a pass-or-warn status against the acceptance bounds of the evaluation suite. Hydra writes the resolved configuration and the working directory of each launch under a date-stamped path inside the artifacts directory, so every experiment carries its own self-contained record.
 
-\subsection{Model Export and Inference}
+\section{Model Export and Inference}
 \label{subsec:impl_export}
 
 Once training is over, a separate entry point converts the Lightning checkpoint of a chosen run into a portable file. Such a checkpoint stores two parameter copies: the values updated by the last backward pass and the moving-average snapshot kept alongside them. By default the converter takes the moving-average copy when present and falls back to the instantaneous one otherwise, since that copy drives validation and is the version the run was scored on. The same checkpoint also carries the architecture stanza of the training session under its saved hyperparameters; that stanza is replayed on top of the export config so that block count, feature width, residual scale and condition dimension are recovered automatically. The generator is then instantiated and the weights are loaded strictly, with any missing or unexpected key aborting the conversion.
