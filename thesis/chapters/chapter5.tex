@@ -1,10 +1,10 @@
 \chapter{Evaluation and Discussion}
-\label{chap:eval}
+\label{chap:results}
 
-This chapter reports the outcomes of the three experimental contrasts of Chapter~\ref{chap:methodology} on the held-out test subset of the dataset. Section~\ref{sec:results_protocol} describes how the runs are selected and how the acceptance bounds are interpreted. Section~\ref{sec:results_capacity} discusses the first contrast (generator capacity). Section~\ref{sec:results_adversarial} discusses the second contrast (regression versus adversarial fine-tune). Section~\ref{sec:results_conditioning} discusses the third contrast (conditioning on the scalar vector). Section~\ref{sec:results_summary} closes with a synthesis across the three contrasts and outlines the limitations.
+This chapter reports the empirical outcomes of the experimental contrasts formulated in the methodology. The training trajectories of the three pixel-only generators are examined first, with attention to the divergence between the point-wise and the structural quality observed in the second half of the schedule. The adversarial fine-tunes of the same three backbones follow, with the focus on the dynamics of the discriminator-generator pair and on the gain in structural quality the composite objective produces over the pixel-only baseline. A summary closes the chapter, placing the six runs side by side against the recalibrated acceptance bounds of the evaluation protocol and against their on-disk footprints, and identifies the configuration with the smallest exported footprint and the highest scores in the suite.
 
 
-\subsection{Regression Stage}
+\section{Regression Stage}
 \label{subsec:results_regression}
 
 \begin{figure}[t]
@@ -23,7 +23,7 @@ RFDN occupies an intermediate position despite the smallest parameter count. Its
 Figure~\ref{fig:val_generators} overlays the three runs on common axes for PSNR, SSIM, ERGAS, and GMAE. The shared pattern is a decoupling between the pixel objective and the structural metric in the second half of the schedule: PSNR continues to rise, the pixel loss continues to fall, and SSIM moves in the opposite direction by between $0.06$ and $0.11$ points relative to its peak. The peak SSIM is reached on every backbone around epoch seventy to eighty, well before the final checkpoint, and is the natural reference point for the warm start of the adversarial stage.
 
 
-\subsection{Adversarial Stage}
+\section{Adversarial Stage}
 \label{subsec:results_adversarial}
 
 \begin{figure}[t]
@@ -45,11 +45,12 @@ Figure~\ref{fig:val_gans} places the three runs on common axes for PSNR, SSIM, E
 \section{Summary}
 \label{sec:results_summary}
 
-Table~\ref{tab:val_metrics} brings together the validation scores of the six runs against the recalibrated acceptance bounds of the evaluation protocol. A run is counted as accepted when all five scores meet their bounds simultaneously. None of the three pixel-only runs passes the full suite. MSRResNet sits $0.08$ dB below on PSNR, EDSR falls $0.002$ short on SSIM, and RFDN falls $0.045$ below on the same metric. The point-wise scores in the regression stage are otherwise comfortable on all three backbones: GMAE stays between three and thirty times under its bound, ERGAS between one and two orders of magnitude under, and max\_ae is met by EDSR alone. The picture is consistent with the regression-stage trajectories analyzed earlier in this chapter: the pixel objective alone drives PSNR well past the required level on the two deeper backbones but cannot lift SSIM to that level on the displacement fronts.
+Table~\ref{tab:val_metrics} brings together the validation scores of the six runs against the acceptance bounds of the evaluation protocol. A run is counted as accepted when all five scores meet their bounds simultaneously. None of the three pixel-only runs passes the full suite. MSRResNet sits $0.08$ dB below on PSNR, EDSR falls $0.002$ short on SSIM, and RFDN falls $0.045$ below on the same metric. The point-wise scores in the regression stage are otherwise comfortable on all three backbones: GMAE stays between three and thirty times under its bound, ERGAS between one and two orders of magnitude under, and max\_ae is met by EDSR alone. The picture is consistent with the regression-stage trajectories analyzed earlier in this chapter: the pixel objective alone drives PSNR well past the required level on the two deeper backbones but cannot lift SSIM to that level on the displacement fronts.
 
 \begin{table}[t]
+\captionsetup{justification=centering}
 \centering
-\caption{Validation metrics of the six selected runs against recalibrated acceptance bounds.}
+\caption{Validation metrics against acceptance bounds.}
 \label{tab:val_metrics}
 \small
 \setlength{\tabcolsep}{6pt}
@@ -80,8 +81,9 @@ The adversarial fine-tune closes the gap on every architecture. All three GAN ru
 Model sizes are collected in Table~\ref{tab:model_sizes}. Parameter counts span a factor of two across the three architectures, from $0.79$ million for RFDN to $1.52$ million for EDSR. The PyTorch checkpoint of an adversarial run is roughly four to five times heavier than the regression-stage checkpoint of the same architecture, because the file on disk there carries the discriminator and the moving-average copy of the generator in addition to the generator itself. The exported ONNX artifact, in contrast, contains only the moving-average generator weights, so its size scales with the architecture alone and does not change between the two training stages. ONNX artifacts range from $3.07$ MB for RFDN to $5.81$ MB for EDSR; the larger PyTorch files belong to the development workflow and are not deployed.
 
 \begin{table}[t]
+\captionsetup{justification=centering}
 \centering
-\caption{Parameter count of the generator and on-disk size of the regression checkpoint, the adversarial checkpoint, and the exported ONNX artifact for the three architectures.}
+\caption{Model sizes.}
 \label{tab:model_sizes}
 \small
 \setlength{\tabcolsep}{8pt}
