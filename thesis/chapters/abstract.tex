@@ -1,5 +1,7 @@
 \begin{abstract}
 % skip one line to make the abstract start with indent
 
-My abstract starts from here.
+
+Numerical simulation of fractured-porous reservoirs faces a trade-off between the accuracy of the fine grid and the cost of solving it. This thesis develops a neural network model that reconstructs fine-grid pressure and saturation fields from coarse-grid solutions of a dual-porosity simulator. Three residual super-resolution backbones are trained with a pixel-only loss and then fine-tuned under a combined objective that adds a domain-specific perceptual term, a reservoir-physics regularizer, and a relativistic adversarial term. Fine-tuning improves both the point-wise and the structural quality of the reconstruction at the same time, against the trade-off reported for natural-image super-resolution. The trained generator is exported to ONNX and integrated into a desktop application that compares the neural reconstruction with a live solver stream and with stored reference solutions.
+
 \end{abstract}
