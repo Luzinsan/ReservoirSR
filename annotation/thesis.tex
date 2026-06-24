@@ -1,0 +1,148 @@
+\documentclass[oneside,final,14pt,a4paper]{extreport}
+
+\usepackage{tempora}   
+
+\usepackage{vmargin}
+\setpapersize{A4}
+\setmarginsrb{2.5cm}{2.2cm}{2.2cm}{2.2cm}{0pt}{10mm}{0pt}{13mm}
+\usepackage{setspace}
+\sloppy
+\setstretch{1.5}
+\usepackage{indentfirst}
+\parindent=1.25cm
+
+%%%%% ADDED TO SUPPORT TT BOLD FACES %%%%
+\DeclareFontShape{OT1}{cmtt}{bx}{n}{<5><6><7><8><9><10><10.95><12><14.4><17.28><20.74><24.88>cmttb10}{}
+\renewcommand{\ttdefault}{pcr}
+%%%%% END %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+\usepackage{atbegshi,picture}
+\usepackage[T1,T2A]{fontenc} 
+\usepackage[utf8]{inputenc}
+\usepackage[main=russian,english]{babel}
+\usepackage[backend=biber,style=ieee,autocite=inline]{biblatex}
+\bibliography{ref.bib}
+\usepackage{csquotes}
+\usepackage{blindtext}
+
+
+\usepackage{pdfpages}
+\newenvironment{bottompar}{\par\vspace*{\fill}}{\clearpage}
+
+% \usepackage{cite}
+\usepackage{amsmath,amsfonts}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+\theoremstyle{remark}
+\newtheorem*{example}{Example}
+
+
+
+\usepackage{graphicx}
+\graphicspath{{figs/}} %path to images
+\usepackage{multirow,array}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[unicode]{hyperref}
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black}
+\usepackage{paralist}
+\usepackage{listings}
+\usepackage{zed-csp}
+\usepackage{fancyhdr}
+\usepackage{color,colortbl}
+\usepackage{booktabs}
+\usepackage{epsfig} % for postscript graphics files
+
+\usepackage{upgreek} 
+\usepackage{bm}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage[font=singlespacing, labelfont=bf]{caption}
+\usepackage{floatrow}
+
+\usepackage{etoolbox}
+
+\makeatletter
+% \chapter без перехода на новую страницу
+\patchcmd{\chapter}{\clearpage}{\par}{}{}
+\patchcmd{\chapter}{\cleardoublepage}{\par}{}{}
+\patchcmd{\chapter}{\thispagestyle{plain}}{}{}{}
+% Уменьшаем верхний отступ заголовка главы
+\patchcmd{\@makechapterhead}{\vspace*{50\p@}}{\vspace*{20\p@}}{}{}
+\patchcmd{\@makeschapterhead}{\vspace*{50\p@}}{\vspace*{20\p@}}{}{}
+\makeatother
+
+\usepackage{titlesec}
+
+% Делаем \chapter заголовком в потоке текста, без разрыва страницы
+\titleformat{\chapter}[hang]
+  {\normalfont\Large\bfseries}   % шрифт заголовка
+  {\thechapter}                   % номер
+  {1em}                           % отступ между номером и текстом
+  {}                              % код перед текстом
+\titlespacing*{\chapter}
+  {0pt}        % левый отступ
+  {3.5ex plus 1ex minus .2ex}     % отступ сверху
+  {2.3ex plus .2ex}      
+
+
+\pagestyle{fancyplain}
+
+% remember section title
+\renewcommand{\chaptermark}[1]%
+	{\markboth{\chaptername~\thechapter~--~#1}{}}
+
+% subsection number and title
+\renewcommand{\sectionmark}[1]%
+	{\markright{\thesection\ #1}}
+
+\rhead[\fancyplain{}{\bf\leftmark}]%
+      {\fancyplain{}{\bf\thepage}}
+\lhead[\fancyplain{}{\bf\thepage}]%
+      {\fancyplain{}{\bf\rightmark}}
+\cfoot{} %bfseries
+
+
+\newcommand{\dedication}[1]
+   {\thispagestyle{empty}
+     
+   \begin{flushleft}\raggedleft #1\end{flushleft}
+}
+
+\begin{document}
+
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyhead[R]{\bfseries\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+% Титул
+\pagestyle{empty}
+\includepdf[pages=-, offset=70 -70]{Annotation.pdf}
+
+% Содержание
+\newpage
+\tableofcontents
+\thispagestyle{empty}
+\newpage
+
+% Основная часть
+\pagestyle{fancyplain}
+\setcounter{page}{3}
+
+\input{chapters/chapter1}
+\input{chapters/chapter2}
+\input{chapters/chapter3}
+\input{chapters/chapter4}
+\input{chapters/chapter5}
+
+\printbibliography[heading=bibintoc,title={Список использованной литературы}]
+
+\end{document}
