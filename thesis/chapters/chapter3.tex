@@ -9,7 +9,7 @@ This chapter formalizes the reconstruction task addressed in the thesis, defines
 
 Reservoir simulation produces a sequence of spatial snapshots that describe the hydrodynamic state of a fractured-porous medium of Type~II at discrete instants of time. Each snapshot is a three-channel field comprising the global pressure $P$, the water saturation in the fracture network $S$, and the water saturation in the matrix blocks $\bar{S}$. The reconstruction task is formulated at the level of a single time step: for any fixed instant of the simulation, the network receives a coarse-grid realization of these three channels and produces a fine-grid estimate of the same three channels. The temporal evolution is obtained by applying the same reconstruction independently at each time step.
 
-Let $X^{LR} \in \mathbb{R}^{C \times h \times w}$ denote the coarse-grid snapshot with $C = 3$ channels and spatial dimensions $h \times w$, and let $X^{HR} \in \mathbb{R}^{C \times H \times W}$ denote the corresponding fine-grid snapshot with $H = s h$ and $W = s w$, where $s$ is the upscaling factor applied identically along both spatial axes. A super-resolution generator is a parametric mapping
+Let $X^{LR} \in \mathbb{R}^{C \times h \times w}$ denote the coarse-grid low-resolution (LR) snapshot with $C = 3$ channels and spatial dimensions $h \times w$, and let $X^{HR} \in \mathbb{R}^{C \times H \times W}$ denote the corresponding fine-grid high-resolution (HR) snapshot with $H = s h$ and $W = s w$, where $s$ is the upscaling factor applied identically along both spatial axes. A super-resolution generator is a parametric mapping
 \begin{equation}
     G_{\theta} : X^{LR} \mapsto \widehat{X}^{HR} \in \mathbb{R}^{C \times H \times W},
     \label{eq:sr_mapping}
@@ -42,7 +42,7 @@ A simulation case is characterized by the full vector of physical and operationa
 
 A training corpus that supports the experimental contrasts of the problem formulation must cover a wide range of operating regimes and petrophysical configurations. To this end, the dataset is generated as a campaign of simulation cases in which a subset of the parameters is randomized over a prescribed domain while the remaining parameters are held fixed at reference values typical of a Type~II fractured-porous reservoir. The randomized subset contains $D$ parameters and falls into three groups. The first group describes the well control regime and the near-wellbore zone and includes the well flow rate $Q_{\text{zab}}$, the contour pressure $P_{32}$, the wellbore radius $R_{\text{skv}}$, the effective near-wellbore viscosity $\mu_{\text{pazp}}$, and the parameters $X_A$, $X_D$ of the matrix mobility closure. The second group describes the numerical configuration of the solver and includes the number of drainage sub-steps $N_{\text{dr}}$ and the saturation cutoff thresholds introduced in the sampling strategy. The third group consists of layer-wise petrophysical properties, primarily the absolute permeabilities of fracture and matrix in each of the five layers and small shifts of the irreducible and maximum water saturations applied identically across the layers.
 
-The parameter domain is sampled with Latin Hypercube Sampling~\cite{mckay2000lhs}, which generates a stratified-randomized design of $N$ cases over the $D$-dimensional unit cube and maps each marginal coordinate to the corresponding physical range. Parameters with a wide dynamic range, such as the absolute permeabilities and the saturation cutoff thresholds, are sampled on a logarithmic scale; the remaining parameters are sampled linearly. Latin Hypercube Sampling is preferred to plain uniform random sampling because the projection of its design onto every individual parameter axis is a stratified sample of size $N$, which improves marginal coverage at the same total budget.
+The parameter domain is sampled with Latin Hypercube Sampling~\cite{mckay2000lhs} (LHS), which generates a stratified-randomized design of $N$ cases over the $D$-dimensional unit cube and maps each marginal coordinate to the corresponding physical range. Parameters with a wide dynamic range, such as the absolute permeabilities and the saturation cutoff thresholds, are sampled on a logarithmic scale; the remaining parameters are sampled linearly. LHS is preferred to plain uniform random sampling because the projection of its design onto every individual parameter axis is a stratified sample of size $N$, which improves marginal coverage at the same total budget.
 
 Every sampled case is subjected to a physical admissibility filter before being submitted to the solver. The filter rejects parameter combinations that violate basic constraints of the formulation, including positivity of the time step, positivity and ordering of the irreducible and maximum saturations within every layer, sufficient simulated time horizon to cover the requested number of snapshots, and compatibility between the prescribed well flow rate $Q_{\text{zab}}$ and the radial geometry. Cases that pass the filter are dispatched to the solver, and their archives are added to the corpus.
 
@@ -89,10 +89,10 @@ The upsampling tail is implemented through sub-pixel convolution rather than thr
 None of the three generators uses Batch Normalization. Batch normalisation removes the per-sample intensity and contrast information present in the feature maps, which conflicts with the requirements of super-resolution reconstruction, as discussed for the EDSR family by Lim et al.~\cite{lim2017enhanced} in Section~\ref{subsec:dl_foundations}.
 
 
-\subsection{MSRResNet}
+\subsection{Modified Super-Resolution Residual Network}
 \label{subsec:method_generators_srresnet}
 
-The MSRResNet generator instantiates the common skeleton of Equation~(\ref{eq:generator_pipeline}) with a body composed of a stack of identical residual blocks. Each residual block has the structure
+The Modified Super-Resolution Residual Network (MSRResNet) generator instantiates the common skeleton of Equation~(\ref{eq:generator_pipeline}) with a body composed of a stack of identical residual blocks. Each residual block has the structure
 \begin{equation}
     x_{i+1} = x_i + \lambda \cdot \mathrm{Conv}_{3 \times 3}\!\bigl( \mathrm{ReLU}\bigl( \mathrm{Conv}_{3 \times 3}(x_i) \bigr) \bigr),
     \label{eq:srresnet_block}
@@ -100,10 +100,10 @@ The MSRResNet generator instantiates the common skeleton of Equation~(\ref{eq:ge
 where both convolutions operate at the body width $C_f$ and $\lambda \in (0, 1)$ is a constant residual-scaling factor that stabilises the optimisation of the residual stack. No normalisation layer is used inside the block. The body of the generator is the composition of $N_B^{\mathrm{MSR}}$ such blocks. The upsampling tail follows the structure of the common skeleton but, in contrast to the other two generators, inserts a ReLU non-linearity after each pixel-shuffle operator.
 
 
-\subsection{EDSR}
+\subsection{Enhanced Deep Super-Resolution}
 \label{subsec:method_generators_edsr}
 
-The EDSR generator instantiates the common skeleton with a body that uses the same residual block as MSRResNet, defined by Equation~(\ref{eq:srresnet_block}), and the same body width $C_f$ and residual-scaling factor $\lambda$. The body depth $N_B^{\mathrm{EDSR}}$ is chosen larger than $N_B^{\mathrm{MSR}}$, so that the two generators differ in body depth while sharing every other component of the skeleton. The upsampling tail uses sub-pixel convolution as in the common skeleton but does not apply a non-linearity after the pixel-shuffle operators. The generator is trained on the coarse-grid input alone, in the same regime as MSRResNet but with a deeper body, which makes it the deep end of the depth-versus-capacity comparison of the first experimental contrast.
+The Enhanced Deep Super-Resolution (EDSR) generator instantiates the common skeleton with a body that uses the same residual block as MSRResNet, defined by Equation~(\ref{eq:srresnet_block}), and the same body width $C_f$ and residual-scaling factor $\lambda$. The body depth $N_B^{\mathrm{EDSR}}$ is chosen larger than $N_B^{\mathrm{MSR}}$, so that the two generators differ in body depth while sharing every other component of the skeleton. The upsampling tail uses sub-pixel convolution as in the common skeleton but does not apply a non-linearity after the pixel-shuffle operators. The generator is trained on the coarse-grid input alone, in the same regime as MSRResNet but with a deeper body, which makes it the deep end of the depth-versus-capacity comparison of the first experimental contrast.
 
 
 \subsection{Residual Feature Distillation Network}
@@ -289,7 +289,7 @@ An exponential moving average of the generator weights is maintained throughout 
 \section{Evaluation Protocol}
 \label{sec:method_evaluation}
 
-All trained generators are evaluated against the fixed suite of metrics formalised in the literature review in Section~\ref{sec:metrics}, summarised in Table~\ref{tab:metric_suite} in decreasing order of priority. Equation references point to the literature review. PSNR is reported as the mean across the three physical channels $P$, $S$, $\bar{S}$; SSIM, GMAE, ERGAS, and SAM are global quantities, with SAM expressed in radians. An experiment satisfies the acceptance criteria if its scores on the first four metrics reach their respective acceptance bounds on the held-out test subset; the SAM bound is a diagnostic of inter-channel coupling and does not enter the acceptance decision. The channel-resolved values of PSNR and MAE for $P$, $S$, $\bar{S}$ are also reported, without acceptance bounds, to expose the asymmetry of the reconstruction across the three channels.
+All trained generators are evaluated against the fixed suite of metrics formalised in the literature review in Section~\ref{sec:metrics}, summarised in Table~\ref{tab:metric_suite} in decreasing order of priority. Equation references point to the literature review. PSNR is reported as the mean across the three physical channels $P$, $S$, $\bar{S}$; SSIM, GMAE, and ERGAS are global quantities. An experiment satisfies the acceptance criteria if its scores on these four metrics reach their respective acceptance bounds on the held-out test subset. The maximum absolute error (max\_ae) and the Spectral Angle Mapper (SAM), the latter expressed in radians, are reported separately as diagnostics: max\_ae characterises the worst-case point deviation and SAM the preservation of inter-channel coupling, and neither enters the acceptance decision. The channel-resolved values of PSNR and MAE for $P$, $S$, $\bar{S}$ are also reported, without acceptance bounds, to expose the asymmetry of the reconstruction across the three channels.
 
 The acceptance bounds of Table~\ref{tab:metric_suite} are tied to the dynamic range of the reconstruction targets defined in the problem formulation. Because the fine-grid fields are smooth almost everywhere outside the displacement fronts, a faithful reconstruction concentrates its point-wise error on a small fraction of the spatial domain, and the bounds on PSNR, GMAE, and ERGAS lie at the level that separates such a reconstruction from one in which the error spreads across the smooth interior. The structural similarity score, in turn, is upper-bounded by the contribution of the sharp transitions at the displacement fronts even when the reconstruction agrees with the target outside them, and the SSIM bound is positioned at the corresponding regime-specific value. A candidate generator is accepted only when its point-wise error stays below the levels appropriate to the physical fields and its local structure around the fronts is preserved.
 
@@ -302,11 +302,17 @@ The acceptance bounds of Table~\ref{tab:metric_suite} are tied to the dynamic ra
 \toprule
 Metric & Equation & Direction & Acceptance bound \\
 \midrule
-PSNR  & (\ref{eq:psnr})  & $\uparrow$   & $\geq 45$    \\
-SSIM  & (\ref{eq:ssim})  & $\uparrow$   & $\geq 0.55$  \\
-GMAE  & (\ref{eq:gmae})  & $\downarrow$ & $\leq 0.002$ \\
-ERGAS & (\ref{eq:ergas}) & $\downarrow$ & $\leq 0.4$   \\
-SAM   & (\ref{eq:sam})   & $\downarrow$ & $\leq 0.15$  \\
+\multicolumn{4}{l}{Acceptance metrics} \\
+\midrule
+PSNR    & (\ref{eq:psnr})  & $\uparrow$   & $\geq 45$    \\
+SSIM    & (\ref{eq:ssim})  & $\uparrow$   & $\geq 0.55$  \\
+GMAE    & (\ref{eq:gmae})  & $\downarrow$ & $\leq 0.002$ \\
+ERGAS   & (\ref{eq:ergas}) & $\downarrow$ & $\leq 0.4$   \\
+\midrule
+\multicolumn{4}{l}{Diagnostic metrics} \\
+\midrule
+max\_ae & (\ref{eq:mae_mse}) & $\downarrow$ & --- \\
+SAM     & (\ref{eq:sam})     & $\downarrow$ & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
