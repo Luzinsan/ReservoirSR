@@ -7,18 +7,18 @@ This chapter formalizes the reconstruction task addressed in the thesis, defines
 \section{Problem Formulation}
 \label{sec:method_problem}
 
-Reservoir simulation produces a sequence of spatial snapshots that describe the hydrodynamic state of a fractured-porous medium of Type~II at discrete instants of time. Each snapshot is a three-channel field comprising the global pressure $P$, the water saturation in the fracture network $S$, and the water saturation in the matrix blocks $\bar{S}$. The reconstruction task is formulated at the level of a single time step: for any fixed instant of the simulation, the network receives a coarse-grid realization of these three channels and the auxiliary scalar information available at the same instant, and produces a fine-grid estimate of the same three channels. The temporal evolution is obtained by applying the same reconstruction independently at each time step.
+Reservoir simulation produces a sequence of spatial snapshots that describe the hydrodynamic state of a fractured-porous medium of Type~II at discrete instants of time. Each snapshot is a three-channel field comprising the global pressure $P$, the water saturation in the fracture network $S$, and the water saturation in the matrix blocks $\bar{S}$. The reconstruction task is formulated at the level of a single time step: for any fixed instant of the simulation, the network receives a coarse-grid realization of these three channels and produces a fine-grid estimate of the same three channels. The temporal evolution is obtained by applying the same reconstruction independently at each time step.
 
-Let $X^{LR} \in \mathbb{R}^{C \times h \times w}$ denote the coarse-grid snapshot with $C = 3$ channels and spatial dimensions $h \times w$, and let $X^{HR} \in \mathbb{R}^{C \times H \times W}$ denote the corresponding fine-grid snapshot with $H = s h$ and $W = s w$, where $s$ is the upscaling factor applied identically along both spatial axes. A vector of auxiliary scalars $\mathbf{z} \in \mathbb{R}^{d}$ is associated with the same simulation instant. A super-resolution generator is a parametric mapping
+Let $X^{LR} \in \mathbb{R}^{C \times h \times w}$ denote the coarse-grid snapshot with $C = 3$ channels and spatial dimensions $h \times w$, and let $X^{HR} \in \mathbb{R}^{C \times H \times W}$ denote the corresponding fine-grid snapshot with $H = s h$ and $W = s w$, where $s$ is the upscaling factor applied identically along both spatial axes. A super-resolution generator is a parametric mapping
 \begin{equation}
-    G_{\theta} : \bigl(X^{LR}, \mathbf{z}\bigr) \mapsto \widehat{X}^{HR} \in \mathbb{R}^{C \times H \times W},
+    G_{\theta} : X^{LR} \mapsto \widehat{X}^{HR} \in \mathbb{R}^{C \times H \times W},
     \label{eq:sr_mapping}
 \end{equation}
-parameterized by $\theta$. When the vector $\mathbf{z}$ is omitted, the mapping reduces to $G_{\theta}(X^{LR})$ and the generator is referred to as unconditional. Training consists in fitting $\theta$ to a finite collection of paired snapshots $\mathcal{D} = \{(X^{LR}_n, X^{HR}_n, \mathbf{z}_n)\}_n$ produced by the numerical simulator under varied physical and operational parameters.
+parameterized by $\theta$. Training consists in fitting $\theta$ to a finite collection of paired snapshots $\mathcal{D} = \{(X^{LR}_n, X^{HR}_n)\}_n$ produced by the numerical simulator under varied physical and operational parameters.
 
 The formulation rests on three assumptions. First, the spatial domain is restricted to a two-dimensional axisymmetric radial-vertical section of the reservoir, consistent with the geometry of the simulator used to generate the dataset. Second, the upscaling factor $s$ is fixed across all experiments and is applied identically to both the radial and the vertical resolution of the computational grid. Third, the coarse-grid input is an independent numerical solution of the governing equations on a coarse mesh rather than a downsampled version of the fine-grid target, so the mapping that $G_{\theta}$ has to fit recovers physical information lost during coarse-grid simulation rather than inverting a known downsampling operator.
 
-The three hypotheses formulated in the introduction translate into three experimental contrasts that share a common evaluation protocol. The first contrast compares residual generators of different depth, trained with the same pixel-wise objective, on the point-wise reconstruction error of the three-channel field. The second contrast compares the same generators before and after fine-tuning within an adversarial framework, with the comparison performed jointly across point-wise metrics and across structural and spectral metrics, so that the trade-off between the two metric groups is measured. The third contrast compares the deepest residual generator in two configurations, one unconditional and one supplied with the vector $\mathbf{z}$, on the same metric suite.
+The two hypotheses formulated in the introduction translate into two experimental contrasts that share a common evaluation protocol. The first contrast compares residual generators of different depth, trained with the same pixel-wise objective, on the point-wise reconstruction error of the three-channel field. The second contrast compares the same generators before and after fine-tuning within an adversarial framework, with the comparison performed jointly across point-wise metrics and across structural and spectral metrics, so that the trade-off between the two metric groups is measured.
 
 
 \section{Dataset Construction}
@@ -62,74 +62,17 @@ The pressure channel is standardized by subtracting the per-channel mean and div
 The shift and scale parameters of both transforms are estimated once from the training subset of the dataset and are stored as a single set of constants reused for all subsequent operations. Validation, test, and inference samples are normalized with the same constants estimated on the training subset, so that no information about the held-out subsets leaks into the normalization step. Low-resolution and high-resolution snapshots are normalized with separate sets of constants estimated on their respective marginal distributions, because numerical diffusion on the coarse grid produces a different distribution of values than the fine-grid reference even for identical physical parameters. The normalization is invertible, and its inverse is applied to the network's output before computing physically interpretable error metrics.
 
 
-\subsection{Conditioning Vector Composition}
-\label{subsec:method_conditioning_vector}
-
-The condition vector $\mathbf{z}$ introduced in the problem formulation encodes the scalar context that disambiguates the coarse-grid input. Two snapshots that share the same coarse-grid representation can correspond to different fine-grid solutions if the underlying simulation case differs in its operational regime, in its layer-wise petrophysical properties, or in the elapsed simulation time. The vector $\mathbf{z}$ supplies this information explicitly so that the generator can resolve the ambiguity. Its components are organized into three groups that differ in their physical role within the dual-porosity formulation and in the way they vary across the dataset.
-
-The first group, the dynamic group, contains the scalars that evolve along the simulation trajectory and that are recorded at every time step alongside the field snapshot. They include the model time, the bottomhole pressure, the cumulative fluid and oil production at the well, the total water cut and its decomposition into fracture and matrix contributions, the recovery factors of the two sub-systems, and the mass-balance error indicators of the discrete scheme. These scalars carry the current position of the simulation along its temporal evolution and the current state of the well response, which are not encoded in the coarse-grid snapshot.
-
-The second group, denoted static, contains the scalars that are fixed within a simulation case but vary across cases. They include the thermo-baric properties of the oil, water, and gas phases (densities, viscosities, compressibilities, thermal expansion coefficients, specific heat capacities, gas solubility parameters), the geometric and operational parameters of the well and the drainage area (radii, contour pressure, prescribed flow rate, regime indicators), the global discretization parameters of the solver (number of layers, radial resolution, number of drainage sub-steps), and the saturation cutoff thresholds introduced in the sampling strategy. These scalars define the physical regime of the case, in the sense that the entire trajectory of the simulation is determined by their values together with the layer-wise petrophysical configuration.
-
-The third group, denoted layers, contains the petrophysical and geometrical parameters of each of the five horizontal layers introduced above. For each layer, the group records the thickness and vertical discretization, the porosities of the fracture and matrix sub-systems, the irreducible and maximum water saturations of both sub-systems, the absolute permeabilities of the fracture and matrix sub-systems, and two indicator flags that specify the inflow regime of the layer through the wellbore perforation and through the underlying aquifer. The same set of features is recorded for every layer, and the layer-wise feature vectors are concatenated into a single flat sub-vector of $\mathbf{z}$ in layer-index order. These scalars enter the dual-porosity equations as constitutive coefficients and determine the spatial heterogeneity of the fine-grid solution that the coarse-grid input does not resolve.
-
-A complete inventory of the components of $\mathbf{z}$ is given in Table~\ref{tab:condition_vector}, with their physical meaning, group, and normalization strategy. Each component is normalized independently with statistics estimated on the training subset, in the same way as the field channels. The normalization strategy is selected per component according to its dynamic range and its physical structure: bounded quantities with a natural minimum and maximum are mapped to the unit interval by an affine min-max transform, quantities that vary over several orders of magnitude are first transformed to a logarithmic scale and then normalized in the same way, quantities that are centered around an operational value and have no natural bounds are standardized to zero mean and unit variance, and integer-valued flags and configuration indicators are passed through unchanged.
-
-The composition of $\mathbf{z}$ is configurable. The full condition vector contains every component of all three groups and has dimension $d = 131$. Two restricted configurations are also defined: a dynamic-only configuration that retains the dynamic group and discards the other two, used to assess the contribution of the static and the layer-wise context to the reconstruction; and an empty configuration in which the condition vector is omitted altogether, used as the unconditional baseline of the third experimental contrast of the thesis.
-
-\begin{table}[h]
-\centering
-\caption{Components of the condition vector $\mathbf{z}$.}
-\label{tab:condition_vector}
-\small
-\begin{tabularx}{\textwidth}{l X c l}
-\toprule
-Group & Component or category & Size & Norm.\ strategy \\
-\midrule
-\multirow{14}{*}{dynamic}
- & model time $t$                                                        & 1  & none \\
- & bottomhole pressure $P_{\text{w}}$                                    & 1  & minmax \\
- & cumulative fluid production $Q_{\text{w}}$                            & 1  & minmax \\
- & cumulative oil production, total $Q^o$                                & 1  & minmax \\
- & cumulative oil production, fracture $Q^o_f$                           & 1  & minmax \\
- & cumulative oil production, matrix $Q^o_m$                             & 1  & minmax \\
- & total water cut $\eta$                                                & 1  & minmax \\
- & water cut, fracture $\eta_f$                                          & 1  & minmax \\
- & water cut, matrix $\eta_m$                                            & 1  & minmax \\
- & total recovery factor $R$                                             & 1  & minmax \\
- & recovery factor, fracture $R_f$                                       & 1  & minmax \\
- & recovery factor, matrix $R_m$                                         & 1  & minmax \\
- & mass-balance indicator, fracture $D_S$                                & 1  & zscore \\
- & mass-balance indicator, matrix $D_Q$                                  & 1  & zscore \\
-\midrule
-\multirow{5}{*}{static}
- & fluid properties (oil, water, gas)                                    & 19 & minmax \\
- & reservoir geometry and compressibility                                & 9  & minmax \\
- & well operating regime and rheological closure                         & 10 & minmax \\
- & time-stepping parameters of the solver                                & 7  & none \\
- & grid resolution, regime flags, and saturation cutoff thresholds       & 12 & none \\
-\midrule
-\multirow{5}{*}{layers ($\times 5$)}
- & layer thickness and vertical discretization                           & 2  & minmax \\
- & fracture and matrix porosities                                        & 2  & minmax \\
- & irreducible and maximum water saturations                             & 4  & minmax \\
- & fracture and matrix absolute permeabilities                           & 2  & log\_minmax \\
- & inflow regime flags                                                   & 2  & none \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
 
 \section{Generator Architectures}
 \label{sec:method_generators}
 
-The first experimental contrast requires three super-resolution generators of different depth and parameter count that share the same training regime, so that the effect of capacity on the point-wise reconstruction error can be isolated. The third contrast additionally requires that one of the generators admit a conditional configuration in which the vector $\mathbf{z}$ enters the computation.
+The first experimental contrast requires three super-resolution generators of different depth and parameter count that share the same training regime, so that the effect of capacity on the point-wise reconstruction error can be isolated.
 
 
 \subsection{Common Design}
 \label{subsec:method_generators_common}
 
-All three generators implement the same input-output interface introduced in the problem formulation: they receive the coarse-grid snapshot $X^{LR}$ together with the optional condition vector $\mathbf{z}$ and produce the fine-grid estimate $\widehat{X}^{HR}$. When the network is unconditional, the second argument is ignored.
+All three generators implement the same input-output interface introduced in the problem formulation: they receive the coarse-grid snapshot $X^{LR}$ and produce the fine-grid estimate $\widehat{X}^{HR}$.
 
 The three architectures share a common pipeline of five stages, summarised in the following diagram:
 \begin{multline}
@@ -154,31 +97,13 @@ The MSRResNet generator instantiates the common skeleton of Equation~(\ref{eq:ge
     x_{i+1} = x_i + \lambda \cdot \mathrm{Conv}_{3 \times 3}\!\bigl( \mathrm{ReLU}\bigl( \mathrm{Conv}_{3 \times 3}(x_i) \bigr) \bigr),
     \label{eq:srresnet_block}
 \end{equation}
-where both convolutions operate at the body width $C_f$ and $\lambda \in (0, 1)$ is a constant residual-scaling factor that stabilises the optimisation of the residual stack. No normalisation layer is used inside the block. The body of the generator is the composition of $N_B^{\mathrm{MSR}}$ such blocks. The upsampling tail follows the structure of the common skeleton but, in contrast to the other two generators, inserts a ReLU non-linearity after each pixel-shuffle operator. The generator is unconditional.
+where both convolutions operate at the body width $C_f$ and $\lambda \in (0, 1)$ is a constant residual-scaling factor that stabilises the optimisation of the residual stack. No normalisation layer is used inside the block. The body of the generator is the composition of $N_B^{\mathrm{MSR}}$ such blocks. The upsampling tail follows the structure of the common skeleton but, in contrast to the other two generators, inserts a ReLU non-linearity after each pixel-shuffle operator.
 
 
 \subsection{EDSR}
 \label{subsec:method_generators_edsr}
 
-The EDSR generator instantiates the common skeleton with a body that uses the same residual block as MSRResNet, defined by Equation~(\ref{eq:srresnet_block}), and the same body width $C_f$ and residual-scaling factor $\lambda$. The body depth $N_B^{\mathrm{EDSR}}$ is chosen larger than $N_B^{\mathrm{MSR}}$, so that the two generators differ in body depth while sharing every other component of the skeleton. The upsampling tail uses sub-pixel convolution as in the common skeleton but does not apply a non-linearity after the pixel-shuffle operators.
-
-The EDSR generator is used in two configurations. The unconditional configuration ignores $\mathbf{z}$ and trains the backbone of Equation~(\ref{eq:generator_pipeline}) on the LR input alone, in the same regime as MSRResNet but with a deeper body. The conditional configuration injects $\mathbf{z}$ into every residual block of the body through the feature-wise linear modulation path described below. Both configurations share the backbone, the body depth $N_B^{\mathrm{EDSR}}$, the body width $C_f$, and the residual-scaling factor $\lambda$, and are trained independently from random initialization, so that the comparison between them measures the effect of the conditioning path on the reconstruction quality.
-
-In the conditional configuration the condition vector $\mathbf{z}$ enters the body through a feature-wise linear modulation~\cite{perez2018film}, in the form introduced in Section~\ref{subsec:conditioning}. The vector $\mathbf{z}$ is first mapped to a fixed-size embedding $\mathbf{e}$ by a two-layer fully-connected encoder
-\begin{equation}
-    \mathbf{e} = W_2 \, \mathrm{ReLU}\!\bigl( W_1 \mathbf{z} \bigr),
-    \label{eq:film_encoder}
-\end{equation}
-where $W_1$ and $W_2$ are the encoder weights, with biases omitted for brevity. The encoder makes the rest of the modulation path independent of the dimension of $\mathbf{z}$ under the different configurations of Table~\ref{tab:condition_vector}: only the input layer $W_1$ depends on the dimension $d$ of the condition vector, while every subsequent operation acts on the fixed-size embedding $\mathbf{e}$.
-
-A linear projection then maps $\mathbf{e}$ into one pair of channel-wise modulation parameters $(\gamma_i, \beta_i) \in \mathbb{R}^{C_f} \times \mathbb{R}^{C_f}$ per residual block of the body, so that block $i$ receives its own pair. Inside the $i$-th block the modulation is applied to the output of the second convolution before the residual scaling and the skip connection, and Equation~(\ref{eq:srresnet_block}) is replaced by
-\begin{equation}
-    x_{i+1} = x_i + \lambda \cdot \bigl( \gamma_i \odot f_i(x_i) + \beta_i \bigr),
-    \label{eq:film_block}
-\end{equation}
-where $f_i(x_i) = \mathrm{Conv}_{3 \times 3}( \mathrm{ReLU}(\mathrm{Conv}_{3 \times 3}(x_i)) )$ is the two-convolution stack of the block and $\odot$ denotes the channel-wise product. The modulation acts on the residual contribution of the block and does not enter the skip path, so the global structure of the body and the long skip connection are preserved.
-
-The linear projection from the embedding to the modulation parameters is initialised so that $\gamma_i = \mathbf{1}$ and $\beta_i = \mathbf{0}$ for every block at the start of training. Equation~(\ref{eq:film_block}) then reduces to Equation~(\ref{eq:srresnet_block}) on the first training step, and the modulation path acts as the identity on the residual stream. Together with the deterministic seeding of all other components of the network, this initialisation guarantees that the unconditional and the conditional configurations of the EDSR generator produce identical outputs at the start of training, so the third experimental contrast measures the contribution of $\mathbf{z}$ to the reconstruction quality.
+The EDSR generator instantiates the common skeleton with a body that uses the same residual block as MSRResNet, defined by Equation~(\ref{eq:srresnet_block}), and the same body width $C_f$ and residual-scaling factor $\lambda$. The body depth $N_B^{\mathrm{EDSR}}$ is chosen larger than $N_B^{\mathrm{MSR}}$, so that the two generators differ in body depth while sharing every other component of the skeleton. The upsampling tail uses sub-pixel convolution as in the common skeleton but does not apply a non-linearity after the pixel-shuffle operators. The generator is trained on the coarse-grid input alone, in the same regime as MSRResNet but with a deeper body, which makes it the deep end of the depth-versus-capacity comparison of the first experimental contrast.
 
 
 \subsection{Residual Feature Distillation Network}
@@ -201,7 +126,7 @@ and four distillation tensors $d_1, d_2, d_3, d_4$ at a reduced channel dimensio
 \end{equation}
 The first three distillation tensors are compact $1 \times 1$ projections of the successive refinement tensors, and the last is a $3 \times 3$ projection of the deepest. The four distillation tensors are concatenated along the channel axis and fused by a $1 \times 1$ convolution into a tensor of the original channel dimension $C_f^{\mathrm{RFDN}}$, which is then passed through a spatial attention sub-network that computes a per-pixel attention map and re-weights the input features. The output of the block is the sum of the attention-weighted tensor and the block input $x$.
 
-The outputs of all body blocks are fused into a single feature tensor before the body tail convolution: the outputs of the $N_B^{\mathrm{RFDN}}$ blocks are concatenated along the channel axis and a $1 \times 1$ convolution reduces the channel dimension back to $C_f^{\mathrm{RFDN}}$. This fused tensor is the $F_B$ of Equation~(\ref{eq:generator_pipeline}); it is then passed through the body tail convolution $\mathcal{C}$ and added to the head output through the long skip connection, so that the head, the long skip connection, the upsampling tail, and the output projection of the common skeleton are inherited unchanged. The upsampling tail uses sub-pixel convolution as in the common skeleton without a non-linearity after the pixel-shuffle operators. The generator is unconditional. It uses fewer body blocks of richer internal structure and has a lower parameter count than MSRResNet and EDSR, contributing a third combination of depth and parameter count to the first experimental contrast.
+The outputs of all body blocks are fused into a single feature tensor before the body tail convolution: the outputs of the $N_B^{\mathrm{RFDN}}$ blocks are concatenated along the channel axis and a $1 \times 1$ convolution reduces the channel dimension back to $C_f^{\mathrm{RFDN}}$. This fused tensor is the $F_B$ of Equation~(\ref{eq:generator_pipeline}); it is then passed through the body tail convolution $\mathcal{C}$ and added to the head output through the long skip connection, so that the head, the long skip connection, the upsampling tail, and the output projection of the common skeleton are inherited unchanged. The upsampling tail uses sub-pixel convolution as in the common skeleton without a non-linearity after the pixel-shuffle operators. It uses fewer body blocks of richer internal structure and has a lower parameter count than MSRResNet and EDSR, contributing a third combination of depth and parameter count to the first experimental contrast.
 
 
 \section{Discriminator}
@@ -232,7 +157,7 @@ The stem $\mathcal{S}$ is a single $3 \times 3$ convolution with stride one that
 \section{Loss Functions}
 \label{sec:method_losses}
 
-The generators are trained against two distinct objectives, depending on the experimental contrast in which they participate. A pixel-wise regression objective fits the generators to the high-resolution targets; it is the only objective used to train the conditional configuration of the EDSR generator. A composite objective adds a domain-specific perceptual term, an optional reservoir-physics regularization, and an adversarial term computed from the discriminator; it is used in the adversarial fine-tuning that underlies the second experimental contrast.
+The generators are trained against two distinct objectives, depending on the experimental contrast in which they participate. A pixel-wise regression objective fits the generators to the high-resolution targets and underlies the first experimental contrast. A composite objective adds a domain-specific perceptual term, an optional reservoir-physics regularization, and an adversarial term computed from the discriminator; it is used in the adversarial fine-tuning that underlies the second experimental contrast.
 
 
 \subsection{Regression Objective}
@@ -245,7 +170,7 @@ The pixel-wise discrepancy between the reconstruction $\widehat{X}^{HR}$ and the
 \end{equation}
 where $C$, $H$, $W$ are the channel and spatial dimensions of the reconstruction and $\|\cdot\|_{1}$ denotes the entry-wise $L_1$ norm.
 
-The regression objective is used as a stand-alone training criterion for the conditional configuration of the EDSR generator. The three unconditional generators are trained with both the regression objective and the composite objective defined below.
+The three generators are trained first with the regression objective and then fine-tuned with the composite objective defined below.
 
 
 \subsection{Composite Objective}
@@ -326,13 +251,13 @@ The four weights $\lambda_{\mathrm{px}}, \lambda_{\mathrm{perc}}, \lambda_{\math
 \section{Training Strategy}
 \label{sec:method_training}
 
-The three experimental contrasts of this chapter divide the training into two stages. The regression stage trains every generator with the pixel-wise objective $\mathcal{L}_{\mathrm{px}}$ and produces the weights evaluated in the first and the third contrast. The adversarial stage fine-tunes the three unconditional generators with the composite objective $\mathcal{L}_G$ and produces the weights evaluated in the second contrast. The conditional configuration of the EDSR generator does not enter the adversarial stage: its evaluation against the unconditional configuration of the same backbone is conducted at the end of the regression stage.
+The two experimental contrasts of this chapter divide the training into two stages. The regression stage trains every generator with the pixel-wise objective $\mathcal{L}_{\mathrm{px}}$ and produces the weights evaluated in the first contrast. The adversarial stage fine-tunes the same three generators with the composite objective $\mathcal{L}_G$ and produces the weights evaluated in the second contrast.
 
 
 \subsection{Regression Stage}
 \label{subsec:method_training_regression}
 
-The regression stage produces four training runs: MSRResNet, the unconditional and the conditional EDSR generators, and RFDN. All four runs minimise the pixel-wise objective $\mathcal{L}_{\mathrm{px}}$ of Equation~(\ref{eq:loss_pixel}) under a single optimisation regime, and differ only in the generator architecture and, for the conditional EDSR generator, in the presence of the condition vector $\mathbf{z}$ at the input.
+The regression stage produces three training runs: MSRResNet, EDSR, and RFDN. All three runs minimise the pixel-wise objective $\mathcal{L}_{\mathrm{px}}$ of Equation~(\ref{eq:loss_pixel}) under a single optimisation regime and differ only in the generator architecture.
 
 Parameters are updated by AdamW with constant weight decay. The learning rate follows a cosine annealing schedule from an initial value $\eta_0$ to a floor $\eta_{\min}$ over the full duration of the stage. Gradients are clipped by their global $L_2$ norm before every update.
 
@@ -343,13 +268,13 @@ An exponential moving average of the generator weights is maintained throughout 
 \end{equation}
 where $\theta_t$ are the instantaneous parameters at training step $t$ and $\alpha \in (0, 1)$ is a fixed decay factor. Validation, checkpoint selection, and the construction of the final exported model use the moving-average copy rather than the instantaneous one, because the moving-average parameters are less sensitive to mini-batch noise and produce smoother validation curves.
 
-For the conditional configuration of the EDSR generator the regression stage is the final training stage, and the resulting moving-average weights are the weights evaluated in the third experimental contrast. For the three unconditional generators the regression stage produces the initial weights of the adversarial stage.
+For all three generators the regression stage produces the initial weights of the adversarial stage.
 
 
 \subsection{Adversarial Stage}
 \label{subsec:method_training_adversarial}
 
-The adversarial stage fine-tunes each of the three unconditional generators under the composite objective $\mathcal{L}_G$ of Equation~(\ref{eq:loss_composite}) and the discriminator objective $\mathcal{L}_D$ of Equation~(\ref{eq:loss_d}). The stage is run once per backbone, so three independent adversarial runs are produced.
+The adversarial stage fine-tunes each of the three generators under the composite objective $\mathcal{L}_G$ of Equation~(\ref{eq:loss_composite}) and the discriminator objective $\mathcal{L}_D$ of Equation~(\ref{eq:loss_d}). The stage is run once per backbone, so three independent adversarial runs are produced.
 
 The generator is initialised from the best regression-stage checkpoint of the same backbone. The discriminator is initialised from random weights. The two networks are updated alternately on every training batch, the discriminator first, the generator second.
 
@@ -359,7 +284,7 @@ The adversarial stage starts with a two-phase warmup that prepares the generator
 
 Two further mechanisms stabilise the dynamics inside the adversarial phase. The first is an adaptive update rule for the discriminator: when the discriminator loss falls below a threshold $\tau_D$, the discriminator step is skipped on the current batch and only the generator step is performed, so that the discriminator is not optimised further on batches it already classifies well. A periodic refresh overrides this rule at fixed epoch intervals and forces a discriminator update, so that the discriminator parameters keep pace with the generator output as the generator continues to improve. The second mechanism is additive Gaussian noise applied to the inputs of the discriminator, with the same standard deviation on the real and on the fake samples, and linearly annealed to zero over a prescribed number of epochs. The noise softens the classification problem in the early epochs of the adversarial stage, when the residuals of the generator output and of the high-resolution targets follow different distributions.
 
-An exponential moving average of the generator weights is maintained throughout the adversarial stage in the form of Equation~(\ref{eq:ema_update}), with a decay factor that can be set independently of the one used in the regression stage. The discriminator is not averaged. Validation and checkpoint selection use the moving-average copy, as in the regression stage. The moving-average weights at the end of the adversarial stage are the weights of each unconditional generator evaluated in the second experimental contrast.
+An exponential moving average of the generator weights is maintained throughout the adversarial stage in the form of Equation~(\ref{eq:ema_update}), with a decay factor that can be set independently of the one used in the regression stage. The discriminator is not averaged. Validation and checkpoint selection use the moving-average copy, as in the regression stage. The moving-average weights at the end of the adversarial stage are the weights of each generator evaluated in the second experimental contrast.
 
 \section{Evaluation Protocol}
 \label{sec:method_evaluation}

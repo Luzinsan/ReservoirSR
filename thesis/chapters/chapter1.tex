@@ -15,14 +15,12 @@ Although reduced-order modeling (ROM) techniques, such as Trajectory Piecewise L
 
 The goal of this thesis is to develop a neural network software complex for accelerated reconstruction of transient pressure and saturation fields in fractured-porous media from coarse-grid simulations.
 
-The research is organized around three research questions, each answered by a dedicated set of computational experiments:
+The research is organized around two research questions, each answered by a dedicated set of computational experiments:
 
 \begin{itemize}
     \item RQ1: Which of the residual super-resolution architectures, trained with a pixel-wise loss, delivers the lowest point-wise reconstruction error on the three-channel state fields of the reservoir?
 
     \item RQ2: Does fine-tuning these architectures within an adversarial framework alter the structural and spectral fidelity of the reconstruction, and what is the trade-off with point-wise accuracy?
-
-    \item RQ3: Does supplying the super-resolution generator with a vector of dynamic simulation parameters improve reconstruction quality compared to an unconditional baseline?
 \end{itemize}
 
 The following hypotheses are formulated.
@@ -45,15 +43,6 @@ The following hypotheses are formulated.
     \item Relation: adversarial training shifts the reconstruction away from the conditional mean of the target distribution towards sharper states, which raises structural-spectral metrics and lowers point-wise metrics.
 \end{itemize}
 
-\textbf{Hypothesis~3.} Supplying the super-resolution generator with a vector of dynamic simulation parameters, in addition to the coarse-grid input state, reduces the reconstruction error compared to an unconditional baseline.
-
-\begin{itemize}
-    \item Independent variable: presence of a vector of dynamic conditioning parameters at the generator input.
-    \item Dependent variable: reconstruction error measured by point-wise and structural-spectral metrics.
-    \item Population: spatial distributions of multiphase flow state variables within the studied computational domain.
-    \item Relation: the same coarse-grid state may correspond to several distinct fine-grid states under different reservoir operating regimes, and the vector of dynamic parameters removes this ambiguity.
-\end{itemize}
-
 To achieve the goal and test the hypotheses, the following objectives are defined:
 
 \begin{enumerate}
@@ -62,8 +51,6 @@ To achieve the goal and test the hypotheses, the following objectives are define
     \item Implement and train three residual super-resolution architectures with a pixel-wise loss to establish point-wise accuracy baselines.
 
     \item Implement an adversarial training scheme and fine-tune the same three architectures within it to assess the change in structural and spectral fidelity of the reconstruction.
-
-    \item Extend the baseline architecture with a feature-wise linear modulation mechanism conditioned on a vector of dynamic simulation parameters and compare it against the unconditional baseline.
 
     \item Conduct computational experiments comparing the obtained models with a metric suite covering point-wise accuracy, structural similarity, and physical consistency of the reconstructed fields.
 
