@@ -234,26 +234,82 @@ The four distillation tensors are concatenated along the channel axis and fused 
 \section{Discriminator}
 \label{sec:method_discriminator}
 
-The second experimental contrast compares the three generators before and after fine-tuning within an adversarial framework. The adversarial training requires a critic that complements the pixel-wise objective with a learning signal sensitive to the high-frequency structure of the reconstruction. The discriminator is used only during the adversarial training of the generators and is discarded after training; it is not part of the inference pipeline of the surrogate model.
+The second experimental contrast compares the three generators before and after fine-tuning within an adversarial framework. The adversarial training requires a discriminator that complements the pixel-wise objective with a learning signal sensitive to the high-frequency structure of the reconstruction. This discriminator is a patch-level critic, in the spirit of those used in adversarial super-resolution~\cite{cvf_srgan}; it is used only during the adversarial training of the generators and is discarded afterwards, so it is not part of the inference pipeline of the surrogate model. Its structure, from the residual input to the map of patch logits, is shown in Figure~\ref{fig:discriminator}.
 
-The discriminator is a patch-level critic, in the spirit of the discriminators used in adversarial super-resolution~\cite{cvf_srgan}. Rather than emitting a single scalar that classifies the entire snapshot as real or fake, it emits a two-dimensional map of local logits, each classifying a local region of the input. The effective receptive field of every output position covers a patch of the input snapshot, so each output position evaluates the local high-frequency structure of its own patch and the adversarial loss is the average of the per-patch terms. A global critic that returns a single score for the whole snapshot tends to bias the generator towards over-smoothed reconstructions, because its gradient signal rewards low-frequency consistency more strongly than local sharpness.
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+    font=\small,
+    node distance=6mm,
+    io/.style={
+        rectangle, rounded corners=2pt,
+        draw=gray!60!black, fill=gray!10,
+        minimum width=14mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    pre/.style={
+        rectangle, rounded corners=2pt,
+        draw=orange!60!black, fill=orange!10,
+        minimum width=20mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    block/.style={
+        rectangle, rounded corners=2pt,
+        draw=blue!50!black, fill=blue!8,
+        minimum width=14mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    body/.style={
+        rectangle, rounded corners=2pt,
+        draw=blue!60!black, thick, fill=blue!16,
+        minimum width=22mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    headd/.style={
+        rectangle, rounded corners=2pt,
+        draw=green!45!black, fill=green!10,
+        minimum width=14mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    outnode/.style={
+        rectangle, rounded corners=2pt,
+        draw=gray!60!black, fill=gray!10,
+        minimum width=16mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    arrow/.style={-{Stealth[length=2mm]}, thick, draw=black!70},
+]
 
-The input to the discriminator is not the candidate snapshot $X$ itself but the residual
+\node[io]    (xin)  {$X$};
+\node[pre, right=of xin]      (res)  {Residual\\$R$};
+\node[block, right=of res]    (stem) {Stem\\$\Sigma$};
+\node[body,  right=of stem]   (bodyD){Strided blocks\\$\Theta_1 \dots \Theta_{N_D}$};
+\node[headd, right=of bodyD]  (proj) {$1{\times}1$ head\\$\Omega$};
+\node[outnode, right=of proj] (lam)  {Patch logits\\$\Lambda$};
+
+\draw[arrow] (xin)   -- (res);
+\draw[arrow] (res)   -- node[above, font=\footnotesize] {$R$} (stem);
+\draw[arrow] (stem)  -- node[above, font=\footnotesize] {$\Psi_0$} (bodyD);
+\draw[arrow] (bodyD) -- node[above, font=\footnotesize] {$\Psi_{N_D}$} (proj);
+\draw[arrow] (proj)  -- (lam);
+
+\end{tikzpicture}
+\caption{Patch discriminator.}
+\label{fig:discriminator}
+\end{figure}
+
+Rather than emitting a single scalar that classifies the whole snapshot as real or fake, the discriminator emits a two-dimensional map of patch logits $\Lambda$, each output position classifying its own local region of the input. The effective receptive field of every position covers one patch of the snapshot, so each logit evaluates the local high-frequency structure of that patch and the adversarial loss is the average of the per-patch terms. A discriminator that instead returned a single score for the whole snapshot would tend to bias the generator towards over-smoothed reconstructions, because its gradient rewards low-frequency consistency more strongly than local sharpness.
+
+The input to the critic is not the candidate snapshot $X$ itself but the residual
 \begin{equation}
     R(X, X^{LR}) = X - \mathrm{Bicubic}_{s}(X^{LR}),
     \label{eq:disc_residual}
 \end{equation}
-where $\mathrm{Bicubic}_{s}(\cdot)$ denotes bicubic interpolation by the upscaling factor $s$ of the problem formulation. Bicubic upsampling of $X^{LR}$ produces a parameter-free, low-pass reference image of the same spatial resolution as $X$. The subtraction in Equation~(\ref{eq:disc_residual}) removes the low-frequency content already present in the reference and concentrates the input of the discriminator on the high-frequency residual that distinguishes a faithful reconstruction from an over-smoothed or hallucinated one. The same transformation is applied to the real samples $X = X^{HR}$ and to the fake samples $X = \widehat{X}^{HR}$, so the discriminator compares the residual signals of the two distributions directly.
+where $\mathrm{Bicubic}_{s}(\cdot)$ denotes bicubic interpolation by the upscaling factor $s$ of the problem formulation. Bicubic upsampling of $X^{LR}$ produces a parameter-free, low-pass reference of the same spatial resolution as $X$, so the subtraction removes the low-frequency content already present in that reference and concentrates the input on the high-frequency residual that distinguishes a faithful reconstruction from an over-smoothed or hallucinated one. The same transformation is applied to the real samples $X = X^{HR}$ and to the fake samples $X = \widehat{X}^{HR}$, so the network compares the residual signals of the two distributions directly.
 
-Every convolutional layer of the discriminator is constrained by spectral normalization~\cite{miyato2018spectral}, in the form introduced in Section~\ref{subsec:gan_revolution}. Spectral normalization replaces each convolutional weight $W$ by $W / \sigma(W)$, where $\sigma(W)$ is an estimate of the largest singular value of the corresponding linear operator. The Lipschitz constant of each layer is then at most one, and the Lipschitz constant of the discriminator as a whole is controlled, which stabilizes the adversarial training and prevents the discriminator from dominating the generator early in the optimization.
+The residual is processed by the three stages of Figure~\ref{fig:discriminator}. The stem $\Sigma$ is a single $3 \times 3$ convolution with stride one that maps the three channels of the residual into a feature tensor $\Psi_0$ of base width $b$, followed by a leaky rectified linear non-linearity. The body is a stack of $N_D$ strided blocks $\Theta_1, \dots, \Theta_{N_D}$; each block applies a $3 \times 3$ convolution with stride two that halves the spatial dimensions and doubles the channel dimension up to a cap $C_{\max}$, a leaky rectified linear non-linearity, a $3 \times 3$ convolution with stride one that preserves the channel dimension, and a second leaky rectified linear non-linearity. Across the body the spatial dimensions are reduced by a factor of $2^{N_D}$ while the channel dimension grows to $C_{\max}$. The head $\Omega$ is a single $1 \times 1$ convolution without non-linearity that projects every spatial position of the final tensor $\Psi_{N_D}$ to a single logit, producing the patch-logit map $\Lambda$.
 
-The discriminator is organized around a stem, a body of strided blocks, and a $1 \times 1$ head:
-\begin{multline}
-    R \xrightarrow{\Sigma} \Psi_0 \xrightarrow{\Theta_1} \Psi_1 \xrightarrow{\Theta_2} \Psi_2 \;\dots\; \xrightarrow{\Theta_{N_D}} \Psi_{N_D} 
-    \xrightarrow{\Omega} \Lambda.
-    \label{eq:disc_pipeline}
-\end{multline}
-The stem $\Sigma$ is a single $3 \times 3$ convolution with stride one that maps the three channels of the residual into a feature tensor of base width $b$, followed by a leaky rectified linear non-linearity. The body is a stack of $N_D$ strided blocks $\Theta_1, \dots, \Theta_{N_D}$. Each block consists of a $3 \times 3$ convolution with stride two that halves the spatial dimensions and doubles the channel dimension up to a cap $C_{\max}$, a leaky rectified linear non-linearity, a $3 \times 3$ convolution with stride one that preserves the channel dimension, and a second leaky rectified linear non-linearity. Across the body the spatial dimensions are reduced by a factor of $2^{N_D}$, while the channel dimension doubles at each block up to $C_{\max}$. The head $\Omega$ is a single $1 \times 1$ convolution without non-linearity that projects every spatial position of $\Psi_{N_D}$ to a single logit, producing a two-dimensional map of patch logits $\Lambda$. The output of the discriminator is the full map $\Lambda$ rather than its global mean, so every spatial position contributes independently to the adversarial objective.
+Every convolutional layer of the discriminator is constrained by spectral normalization~\cite{miyato2018spectral}, in the form introduced in Section~\ref{subsec:gan_revolution}: each weight $W$ is replaced by $W / \sigma(W)$, where $\sigma(W)$ estimates the largest singular value of the corresponding linear operator. The Lipschitz constant of each layer is then at most one, which controls the Lipschitz constant of the discriminator as a whole, stabilizes the adversarial training, and prevents it from dominating the generator early in the optimization. Because the discriminator operates on the residual rather than on the raw snapshot and scores every patch independently, its gradient drives the generator towards locally sharp, high-frequency detail rather than towards global low-frequency agreement, which is the signal that the pixel-wise objective alone cannot supply.
 
 
 \section{Loss Functions}
@@ -387,7 +443,62 @@ The generator is initialized from the best regression-stage checkpoint of the sa
 
 Both networks are optimized with Adam, each with its own optimizer and cosine annealing schedule, from initial learning rates $\eta_G^{0}$ or $\eta_D^{0}$ to the floor $\eta_{\min}$. The discriminator is given a larger initial learning rate than the generator, $\eta_D^{0} > \eta_G^{0}$, following the two time-scale update rule: the generator starts from a regression-stage solution, while the discriminator starts from a random initialization, and the larger learning rate compensates for the longer adaptation path of the discriminator. Before every update the gradients of each network are rescaled so that their global $L_2$ norm does not exceed a fixed clip threshold, set separately from the regression stage.
 
-The adversarial stage starts with a two-phase warmup that prepares the generator and the discriminator before the full composite objective is activated. During the first $N_D^{\mathrm{w}}$ epochs only the discriminator is updated; the generator parameters are held fixed, and the discriminator alone is trained on the residual input of Equation~(\ref{eq:disc_residual}), so that it provides a non-trivial classification signal before its gradient enters the generator update. During the next $N_G^{\mathrm{w}}$ epochs the generator is updated against the non-adversarial terms of $\mathcal{L}_G$ with the adversarial weight $\lambda_{\mathrm{adv}}$ held at zero, which lets the generator adjust to the gradients of the perceptual and physics terms before the discriminator-induced gradient is added. Once both warmup phases are complete, $\lambda_{\mathrm{adv}}$ is set to its target value and every subsequent update uses the full composite objective.
+The adversarial stage starts with a two-phase warmup that prepares the generator and the discriminator before the full composite objective is activated. During the first $N_D^{\mathrm{w}}$ epochs only the discriminator is updated; the generator parameters are held fixed, and the discriminator alone is trained on the residual input of Equation~(\ref{eq:disc_residual}), so that it provides a non-trivial classification signal before its gradient enters the generator update. During the next $N_G^{\mathrm{w}}$ epochs the generator is updated against the non-adversarial terms of $\mathcal{L}_G$ with the adversarial weight $\lambda_{\mathrm{adv}}$ held at zero, which lets the generator adjust to the gradients of the perceptual and physics terms before the discriminator-induced gradient is added. Once both warmup phases are complete, $\lambda_{\mathrm{adv}}$ is set to its target value and every subsequent update uses the full composite objective. Figure~\ref{fig:adv_schedule} summarizes this schedule.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+    font=\small,
+    phase/.style={
+        rectangle, draw=blue!50!black, fill=blue!8,
+        minimum height=8mm, align=center, inner sep=2pt, font=\footnotesize
+    },
+    lab/.style={font=\footnotesize, anchor=west},
+    on/.style={font=\footnotesize, anchor=west, green!45!black},
+    off/.style={font=\footnotesize, anchor=west, gray!60},
+    arrow/.style={-{Stealth[length=2mm]}, thick, draw=black!70},
+]
+
+% timeline axis
+\def\W{120mm}
+\def\xA{0mm}      % start
+\def\xB{34mm}     % end of disc warmup (N_D^w)
+\def\xC{70mm}     % end of gen warmup
+\def\xD{120mm}    % end
+
+% phase bars
+\node[phase, anchor=west, minimum width=34mm] at (\xA,0)  (p1) {Discriminator\\warmup};
+\node[phase, anchor=west, minimum width=36mm, fill=blue!14] at (\xB,0)  (p2) {Generator\\warmup};
+\node[phase, anchor=west, minimum width=50mm, fill=green!12, draw=green!45!black] at (\xC,0)  (p3) {Full composite\\objective};
+
+% timeline arrow under bars
+\draw[arrow] (\xA,-7mm) -- (\xD+5mm,-7mm) node[right, font=\footnotesize] {epoch};
+
+% tick labels
+\node[font=\footnotesize, anchor=north] at (\xA,-7mm)  {$0$};
+\node[font=\footnotesize, anchor=north] at (\xB,-7mm)  {$N_D^{\mathrm{w}}$};
+\node[font=\footnotesize, anchor=north] at (\xC,-7mm)  {$N_D^{\mathrm{w}}{+}N_G^{\mathrm{w}}$};
+
+% rows of activity, placed below the axis
+\node[lab] at (\xA,-15mm) {update $D$:};
+\node[on]  at (24mm,-15mm) {on};
+\node[off] at (40mm,-15mm) {frozen};
+\node[on]  at (76mm,-15mm) {adaptive (skip if loss $<\tau_D$)};
+
+\node[lab] at (\xA,-21mm) {update $G$:};
+\node[off] at (24mm,-21mm) {frozen};
+\node[on]  at (40mm,-21mm) {non-adversarial terms};
+\node[on]  at (76mm,-21mm) {full $\mathcal{L}_G$};
+
+\node[lab] at (\xA,-27mm) {$\lambda_{\mathrm{adv}}$:};
+\node[off] at (24mm,-27mm) {$0$};
+\node[off] at (40mm,-27mm) {$0$};
+\node[on]  at (76mm,-27mm) {target value};
+
+\end{tikzpicture}
+\caption{Adversarial training schedule.}
+\label{fig:adv_schedule}
+\end{figure}
 
 Two further mechanisms stabilize the dynamics inside the adversarial phase. The first is an adaptive update rule for the discriminator: when the discriminator loss falls below a threshold $\tau_D$, the discriminator step is skipped on the current batch and only the generator step is performed, so that the discriminator is not optimized further on batches it already classifies well. A periodic refresh overrides this rule at fixed epoch intervals and forces a discriminator update, so that the discriminator parameters keep pace with the generator output as the generator continues to improve. The second mechanism is additive Gaussian noise applied to the inputs of the discriminator, with the same standard deviation on the real and on the fake samples, and linearly annealed to zero over a prescribed number of epochs. The noise softens the classification problem in the early epochs of the adversarial stage, when the residuals of the generator output and of the high-resolution targets follow different distributions.
 
