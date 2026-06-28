@@ -9,12 +9,12 @@ This chapter reports the empirical outcomes of the experimental contrasts formul
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/val_psnr_ssim_ergas_gmae_generators.png}
+\includegraphics[width=\textwidth]{figures/new_val_psnr_ssim_ergas_gmae_generators.png}
 \caption{Validation metrics over training epochs for the three generators in the regression stage.}
 \label{fig:val_generators}
 \end{figure}
 
-EDSR (recorded in the logs under the label MDSR) follows the smoothest of the three trajectories. The pixel loss falls from $0.08$ at the start of training to $1.3 \cdot 10^{-3}$ at the end of one hundred fifty epochs, with the gradient norm decaying from approximately $2$ to $0.5$ over the same horizon and no instability in between. The PSNR climbs from $7$ dB at the tenth validation pass through the thirty-decibel threshold around epoch sixty to a final plateau near $46.8$ dB; the channel-wise breakdown at the last epoch puts the pressure channel at $43.5$ dB and the two saturation channels at $51.4$ and $51.8$ dB, consistent with the wider dynamic range of pressure. SSIM behaves differently: it rises to a peak of $0.63$ near epoch eighty, drifts down to $0.44$ by epoch one hundred thirty, and recovers only partially to $0.55$ at the end. The drift away from the SSIM peak coincides with the second half of the regression schedule, where the pixel loss continues to fall but the structure of the displacement fronts begins to smooth out under the unrestrained $L_1$ objective.
+EDSR follows the smoothest of the three trajectories. The pixel loss falls from $0.08$ at the start of training to $1.3 \cdot 10^{-3}$ at the end of one hundred fifty epochs, with the gradient norm decaying from approximately $2$ to $0.5$ over the same horizon and no instability in between. The PSNR climbs from $7$ dB at the tenth validation pass through the thirty-decibel threshold around epoch sixty to a final plateau near $46.8$ dB; the channel-wise breakdown at the last epoch puts the pressure channel at $43.5$ dB and the two saturation channels at $51.4$ and $51.8$ dB, consistent with the wider dynamic range of pressure. SSIM behaves differently: it rises to a peak of $0.63$ near epoch eighty, drifts down to $0.44$ by epoch one hundred thirty, and recovers only partially to $0.55$ at the end. The drift away from the SSIM peak coincides with the second half of the regression schedule, where the pixel loss continues to fall but the structure of the displacement fronts begins to smooth out under the unrestrained $L_1$ objective.
 
 MSRResNet converges more slowly and to a lower ceiling. The first five validation passes leave the network essentially untrained, with the validation loss still near $0.8$ and PSNR around one decibel, against the seven decibels reached by the deeper network at the same milestone. From epoch ten onward the trajectory normalizes, the training loss settles into the same $0.08 \to 1.4 \cdot 10^{-3}$ band, and the gradient norm contracts from $2.0$ to $0.15$. Final PSNR reaches $44.94$ dB and the channel split is $42.2$ / $46.9$ / $49.1$ dB for $P$, $S$, and $\bar{S}$, with the pressure channel trailing the saturations as in the larger backbone. SSIM shows the same regression-stage instability, swinging between $0.42$ and $0.61$ over neighboring validation passes around epoch seventy and finishing at $0.56$ after a long plateau in which PSNR adds barely more than two decibels across fifty epochs, signaling that the capacity of the network has been reached.
 
@@ -28,7 +28,7 @@ Figure~\ref{fig:val_generators} overlays the three runs on common axes for PSNR,
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/val_psnr_ssim_ergas_gmae_gans.png}
+\includegraphics[width=\textwidth]{figures/new_val_psnr_ssim_ergas_gmae_gans.png}
 \caption{Validation metrics over training epochs for the three generators in the adversarial stage.}
 \label{fig:val_gans}
 \end{figure}
