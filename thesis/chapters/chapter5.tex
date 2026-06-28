@@ -1,7 +1,7 @@
 \chapter{Evaluation and Discussion}
 \label{chap:results}
 
-This chapter reports the empirical outcomes of the experimental contrasts formulated in the methodology. The training trajectories of the three pixel-only generators are examined first, with attention to the divergence between the point-wise and the structural quality observed in the second half of the schedule. The adversarial fine-tunes of the same three backbones follow, with the focus on the dynamics of the discriminator-generator pair and on the gain in structural quality the composite objective produces over the pixel-only baseline. A summary closes the chapter, placing the six runs side by side against the acceptance bounds of the evaluation protocol and against their on-disk footprints, and identifies the configuration with the smallest exported footprint and the highest scores in the suite.
+This chapter reports the empirical outcomes of the experimental contrasts formulated in the methodology. The training trajectories of the three pixel-only generators are examined first, with attention to the divergence between the point-wise and the structural quality observed in the second half of the schedule. The adversarial fine-tunes of the same three backbones follow, with the focus on the dynamics of the discriminator-generator pair and on the gain in structural quality the composite objective produces over the pixel-only baseline. A summary closes the chapter, placing the six runs side by side against the acceptance bounds of the evaluation protocol and against their on-disk footprints, and identifies the configuration with the smallest exported footprint and the leading point-wise and structural scores.
 
 
 \section{Regression Stage}
@@ -37,12 +37,12 @@ EDSR follows the cleanest of the three adversarial trajectories. The five-epoch 
 
 MSRResNet yields the largest relative SSIM gain together with the most volatile training dynamics. The warmup phases follow the same recipe and lift SSIM from $0.40$ to $0.54$ on the perceptual term alone before the discriminator gradient is enabled. The full composite objective then drives the critic into a sequence of swings: at epoch thirty-three its loss briefly rises to $0.77$, then collapses to $\ln 2$ for one validation window before recovering; at epoch sixty-eight the critic-to-generator ratio peaks at $1.54$ and the skip rule activates for two consecutive epochs; from epoch ninety-three onward the rule fires intermittently as the discriminator keeps tightening on the smaller generator. PSNR rises to $46.04$ dB at epoch ninety-three and stabilizes at $45.99$--$46.04$ dB afterwards; SSIM oscillates with an amplitude of about $\pm 0.10$ between epochs but reaches a peak of $0.59$ at epochs eighty-seven, ninety-two, and ninety-five. The final channel split is $43.4$ / $48.3$ / $50.0$ dB for $P$, $S$, and $\bar{S}$, with the pressure channel improving by one decibel relative to the pixel-only baseline.
 
-RFDN gives the most stable trajectory of the three and reaches the highest scores. The skip rule never activates over one hundred thirteen epochs, the critic-to-generator ratio stays in a narrow band around one outside a single excursion to $1.63$ at epoch forty-five, and both networks recover from that excursion without leaving any trace on the generator output. SSIM transiently dips from $0.52$ to $0.46$ during the generator warmup as the perceptual term reshapes the structural content, returns to the baseline by epoch eighteen, and then climbs to a peak of $0.629$ at epoch fifty-six with further peaks above $0.62$ at epochs sixty and sixty-one. PSNR rises steadily to $47.77$ dB at the end of training, the highest of the three adversarial runs, and the channel split $44.6$ / $51.8$ / $52.8$ dB is the most balanced as well, with the pressure channel landing $1.5$ dB above the corresponding pixel-only run.
+RFDN gives the most stable trajectory of the three and reaches the highest PSNR and SSIM. The skip rule never activates over one hundred thirteen epochs, the critic-to-generator ratio stays in a narrow band around one outside a single excursion to $1.63$ at epoch forty-five, and both networks recover from that excursion without leaving any trace on the generator output. SSIM transiently dips from $0.52$ to $0.46$ during the generator warmup as the perceptual term reshapes the structural content, returns to the baseline by epoch eighteen, and then climbs to a peak of $0.629$ at epoch fifty-six with further peaks above $0.62$ at epochs sixty and sixty-one. PSNR rises steadily to $47.77$ dB at the end of training, the highest of the three adversarial runs, and the channel split $44.6$ / $51.8$ / $52.8$ dB is the most balanced as well, with the pressure channel landing $1.5$ dB above the corresponding pixel-only run.
 
 Figure~\ref{fig:val_gans} places the three runs on common axes for PSNR, SSIM, ERGAS, and GMAE. The shared pattern across the three trajectories is that the warmup decouples the pixel and the perceptual updates, the full composite objective then activates without an early SSIM collapse, and the skip rule contains the discriminator when it becomes overconfident on the current batch. PSNR rises by between one and one and a half decibels relative to the pixel-only baseline on every backbone, SSIM rises by between $0.07$ and $0.13$ points, and no run shows the trade-off between point-wise and structural quality reported in classical SRGAN training.
 
 
-\section{Summary}
+\section*{Summary}
 \label{sec:results_summary}
 
 Table~\ref{tab:val_metrics} brings together the validation scores of the six runs against the acceptance bounds of the evaluation protocol. A run is counted as accepted when all four scores meet their bounds simultaneously. None of the three pixel-only runs passes the full suite. MSRResNet sits $0.08$ dB below on PSNR, EDSR falls $0.002$ short on SSIM, and RFDN falls $0.045$ below on the same metric. The point-wise scores in the regression stage are otherwise comfortable on all three backbones: GMAE stays between three and thirty times under its bound and ERGAS between one and two orders of magnitude under. The picture is consistent with the regression-stage trajectories analyzed earlier in this chapter: the pixel objective alone drives PSNR well past the required level on the two deeper backbones but cannot lift SSIM to that level on the displacement fronts.
@@ -63,20 +63,20 @@ Acceptance bound
 \midrule
 \multicolumn{5}{l}{Regression stage} \\
 \midrule
-MSRResNet & 44.92          & \textbf{0.559} & \textbf{0.00195} & \textbf{0.380} \\
+MSRResNet & 44.92          & \textbf{0.559} & 0.00195          & 0.380          \\
 EDSR      & \textbf{46.92} & 0.548          & \textbf{0.00064} & \textbf{0.272} \\
-RFDN      & \textbf{46.11} & 0.505          & \textbf{0.00083} & \textbf{0.310} \\
+RFDN      & 46.11          & 0.505          & 0.00083          & 0.310          \\
 \midrule
 \multicolumn{5}{l}{Adversarial fine-tune} \\
 \midrule
-MSRResNet GAN & \textbf{45.99} & \textbf{0.590} & \textbf{0.00165} & \textbf{0.353} \\
-EDSR GAN      & \textbf{47.71} & \textbf{0.606} & \textbf{0.00062} & \textbf{0.257} \\
-RFDN GAN      & \textbf{47.77} & \textbf{0.634} & \textbf{0.00070} & \textbf{0.264} \\
+MSRResNet GAN & 45.99          & 0.590          & 0.00165          & 0.353          \\
+EDSR GAN      & 47.71          & 0.606          & \textbf{0.00062} & \textbf{0.257} \\
+RFDN GAN      & \textbf{47.77} & \textbf{0.634} & 0.00070          & 0.264          \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The adversarial fine-tune closes the gap on every architecture. All three GAN runs pass all four bounds, with margins between $0.04$ and $0.08$ on SSIM and between $1.0$ and $2.8$ dB on PSNR. The relative SSIM gain over the corresponding pixel-only run is largest for RFDN ($+0.129$ from $0.505$), which goes from the only backbone that misses three bounds to the configuration with the highest score on every metric in the suite. PSNR rises by between $1.0$ and $1.7$ dB across the three runs, against the conventional trade-off reported for classical adversarial super-resolution in which PSNR is sacrificed for perceptual quality. The composite objective with the dual-porosity physics priors and the discriminator skip rule preserves the point-wise accuracy reached during pixel-only training and adds the structural gain on top.
+The adversarial fine-tune closes the gap on every architecture. All three GAN runs pass all four bounds, with margins between $0.04$ and $0.08$ on SSIM and between $1.0$ and $2.8$ dB on PSNR. The relative SSIM gain over the corresponding pixel-only run is largest for RFDN ($+0.129$ from $0.505$), which goes from the only backbone that misses three bounds to the configuration with the best point-wise and structural scores, leading on PSNR and SSIM. PSNR rises by between $1.0$ and $1.7$ dB across the three runs, against the conventional trade-off reported for classical adversarial super-resolution in which PSNR is sacrificed for perceptual quality. The composite objective with the dual-porosity physics priors and the discriminator skip rule preserves the point-wise accuracy reached during pixel-only training and adds the structural gain on top.
 
 Model sizes are collected in Table~\ref{tab:model_sizes}. Parameter counts span a factor of two across the three architectures, from $0.79$ million for RFDN to $1.52$ million for EDSR. The PyTorch checkpoint of an adversarial run is roughly four to five times heavier than the regression-stage checkpoint of the same architecture, because the file on disk there carries the discriminator and the moving-average copy of the generator in addition to the generator itself. The exported ONNX artifact, in contrast, contains only the moving-average generator weights, so its size scales with the architecture alone and does not change between the two training stages. ONNX artifacts range from $3.07$ MB for RFDN to $5.81$ MB for EDSR; the larger PyTorch files belong to the development workflow and are not deployed.
 
@@ -89,7 +89,7 @@ Model sizes are collected in Table~\ref{tab:model_sizes}. Parameter counts span 
 \setlength{\tabcolsep}{8pt}
 \begin{tabular}{l c c c c}
 \toprule
-Architecture & Params (M) & Regression ckpt (MB) & Adversarial ckpt (MB) & ONNX (MB) \\
+Architecture & Params (M) & \makecell{Regression \\ checkpoint (MB)} & \makecell{Adversarial \\ checkpoint (MB)} & ONNX (MB) \\
 \midrule
 RFDN      & 0.79 & 12.31 & 65.66 & 3.07 \\
 MSRResNet & 0.93 & 14.22 & 67.53 & 3.55 \\
@@ -98,4 +98,4 @@ EDSR      & 1.52 & 23.29 & 76.61 & 5.81 \\
 \end{tabular}
 \end{table}
 
-RFDN GAN combines the smallest exported footprint with the highest score on every metric in the quality suite. EDSR GAN places second on PSNR but trails RFDN GAN on SSIM by $0.028$ points at almost twice the parameter count. MSRResNet GAN passes every bound and is the lightest backbone among those that fail in the pixel-only regime, which makes it the natural candidate for resource-constrained deployment if RFDN is not available.
+RFDN GAN combines the smallest exported footprint with the leading PSNR and SSIM scores in the suite, while EDSR GAN attains the best GMAE and ERGAS. EDSR GAN trails RFDN GAN on SSIM by $0.028$ points at almost twice the parameter count. MSRResNet GAN passes every bound and is the lightest backbone among those that fail in the pixel-only regime, which makes it the natural candidate for resource-constrained deployment if RFDN is not available.
