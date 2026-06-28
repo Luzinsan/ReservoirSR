@@ -64,57 +64,154 @@ The shift and scale parameters of both transforms are estimated once from the tr
 \section{Generator Architectures}
 \label{sec:method_generators}
 
-The first experimental contrast requires three super-resolution generators of different depth and parameter count that share the same training regime, so that the effect of capacity on the point-wise reconstruction error can be isolated.
+The first experimental contrast requires three super-resolution generators of different depth and parameter count that share the same training regime, so that the effect of capacity on the point-wise reconstruction error can be isolated. The three generators differ only in the body that fills the shared skeleton described next; their building blocks are taken from the residual super-resolution literature reviewed in Section~\ref{subsec:dl_foundations}.
 
 
 \subsection*{Common Design}
 \label{subsec:method_generators_common}
 
-All three generators implement the same input-output interface introduced in the problem formulation: they receive the coarse-grid snapshot $X^{LR}$ and produce the fine-grid estimate $\widehat{X}^{HR}$.
+All three generators map the coarse-grid snapshot $X^{LR}$ to the fine-grid estimate $\widehat{X}^{HR}$ through a common pipeline of five stages, shown in Figure~\ref{fig:generator_skeleton}.
 
-The three architectures share a common pipeline of five stages, summarized in the following diagram:
-\begin{multline}
-    X^{LR} \xrightarrow{\mathcal{H}} F_0 \xrightarrow{\mathcal{B}} F_B \xrightarrow{\mathcal{C}} F_B' 
-    \xrightarrow{+ F_0} F \xrightarrow{\mathcal{U}} G \xrightarrow{\mathcal{T}} \widehat{X}^{HR}.
-    \label{eq:generator_pipeline}
-\end{multline}
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+    font=\small,
+    node distance=6mm,
+    io/.style={
+        rectangle, rounded corners=2pt,
+        draw=gray!60!black, fill=gray!10,
+        minimum width=14mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    block/.style={
+        rectangle, rounded corners=2pt,
+        draw=blue!50!black, fill=blue!8,
+        minimum width=15mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    body/.style={
+        rectangle, rounded corners=2pt,
+        draw=blue!60!black, thick, fill=blue!16,
+        minimum width=17mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    tail/.style={
+        rectangle, rounded corners=2pt,
+        draw=green!45!black, fill=green!10,
+        minimum width=15mm, minimum height=11mm,
+        align=center, inner sep=2pt
+    },
+    sumc/.style={
+        circle, draw=black!70, fill=white,
+        inner sep=0pt, minimum size=5mm
+    },
+    arrow/.style={-{Stealth[length=2mm]}, thick, draw=black!70},
+]
+
+\node[io]    (lr)   {$X^{LR}$};
+\node[block, right=of lr]     (head) {Head\\$\mathcal{H}$};
+\node[body,  right=of head]   (bodyB){Body\\$\mathcal{B}$};
+\node[block, right=of bodyB]  (conv) {Tail conv\\$\mathcal{C}$};
+\node[sumc,  right=of conv]   (sum)  {$+$};
+\node[tail,  right=of sum]    (up)   {Upsample\\$\mathcal{U}$};
+\node[block, right=of up]     (proj) {Output\\$\mathcal{T}$};
+\node[io,    right=of proj]   (hr)   {$\widehat{X}^{HR}$};
+
+\draw[arrow] (lr)    -- (head);
+\draw[arrow] (head)  -- node[above, font=\footnotesize] {$F_0$} (bodyB);
+\draw[arrow] (bodyB) -- node[above, font=\footnotesize] {$F_B$} (conv);
+\draw[arrow] (conv)  -- (sum);
+\draw[arrow] (sum)   -- node[above, font=\footnotesize] {$F$} (up);
+\draw[arrow] (up)    -- node[above, font=\footnotesize] {$G$} (proj);
+\draw[arrow] (proj)  -- (hr);
+
+\draw[arrow, draw=blue!50!black, dashed]
+    (head.south) -- ++(0,-7mm)
+    -| (sum.south)
+    node[pos=0.25, below, font=\footnotesize, black] {long skip $F_0$};
+
+\node[font=\footnotesize\itshape, gray!50!black]
+    at ([yshift=7mm]bodyB.north) {coarse grid $h \times w$};
+\node[font=\footnotesize\itshape, gray!50!black]
+    at ($(up.north)!0.5!(proj.north) + (1,5mm)$) {fine grid $H \times W$};
+
+\end{tikzpicture}
+\caption{Common generator skeleton.}
+\label{fig:generator_skeleton}
+\end{figure}
+
+
 The head $\mathcal{H}$ is a single $3 \times 3$ convolution that lifts the three input channels into a feature tensor $F_0$ of fixed width $C_f$ at the low-resolution spatial size. The body $\mathcal{B}$ is a stack of repeated building blocks that processes the feature tensor at the same width $C_f$ and at the same low-resolution spatial size. The body tail convolution $\mathcal{C}$ is a single $3 \times 3$ convolution applied to the body output. The long skip connection adds $F_0$ to the output of $\mathcal{C}$, so the body and its tail convolution learn the residual not captured by the head alone. The upsampling tail $\mathcal{U}$ raises the spatial resolution by the factor $s$ of the problem formulation and keeps the feature width at $C_f$. The output projection $\mathcal{T}$ is a single $3 \times 3$ convolution that maps the upsampled features back into the three output channels of $\widehat{X}^{HR}$. The three generators differ in the composition of the body $\mathcal{B}$, while sharing the same head $\mathcal{H}$, body tail convolution $\mathcal{C}$, long skip connection, upsampling tail $\mathcal{U}$, and output projection $\mathcal{T}$.
 
-The pipeline of Equation~(\ref{eq:generator_pipeline}) realizes the post-upsampling pattern introduced by Shi et al.~\cite{shi2016real} and discussed in Section~\ref{subsec:dl_foundations}. All convolutions of the head, the body, and the body tail operate on feature tensors at the coarse-grid spatial size $h \times w$. Only the upsampling tail $\mathcal{U}$ and the output projection $\mathcal{T}$ act on tensors at the fine-grid spatial size $H \times W = (s \cdot h) \times (s \cdot w)$. This placement keeps the most expensive convolutions on the smaller feature maps and concentrates the resolution increase in the sub-pixel convolution layers of the tail.
+The pipeline of Figure~\ref{fig:generator_skeleton} realizes the post-upsampling pattern introduced by Shi et al.~\cite{shi2016real} and discussed in Section~\ref{subsec:dl_foundations}. All convolutions of the head, the body, and the body tail operate on feature tensors at the coarse-grid spatial size $h \times w$. Only the upsampling tail $\mathcal{U}$ and the output projection $\mathcal{T}$ act on tensors at the fine-grid spatial size $H \times W = (s \cdot h) \times (s \cdot w)$. This placement keeps the most expensive convolutions on the smaller feature maps and concentrates the resolution increase in the sub-pixel convolution layers of the tail.
 
 The upsampling tail is implemented through sub-pixel convolution rather than through a fixed interpolation kernel or through transposed convolution. A sub-pixel convolution stage that increases the spatial resolution by a factor of two consists of a $3 \times 3$ convolution that maps a feature tensor of width $C_f$ at low resolution into a tensor of width $4 C_f$ at the same low resolution, followed by a pixel-shuffle operator that rearranges these $4 C_f$ channels into $C_f$ channels at twice the spatial resolution. The pixel-shuffle operator is a deterministic permutation of tensor elements with no trainable parameters; the learnable part of the upsampling stage is concentrated in the preceding convolution, which can therefore learn the high-frequency content of the upsampled output. For an upsampling factor $s = 4$ the tail applies two such stages in sequence. The information that the network has to recover is high-frequency by construction: the displacement fronts and the fine-scale heterogeneities that the coarse-grid simulation does not resolve carry energy at spatial frequencies that the coarse grid cannot represent, and any fixed interpolation kernel is a low-pass filter that suppresses this high-frequency content. Sub-pixel convolution learns the upsampling operator from data rather than fixing a predetermined frequency response, and avoids the checkerboard artifacts of transposed convolution at strides greater than one.
 
-None of the three generators uses Batch Normalization. Batch normalization removes the per-sample intensity and contrast information present in the feature maps, which conflicts with the requirements of super-resolution reconstruction, as discussed for the EDSR family by Lim et al.~\cite{lim2017enhanced} in Section~\ref{subsec:dl_foundations}.
+None of the three generators uses Batch Normalization. Batch normalization removes the per-sample intensity and contrast information present in the feature maps, which conflicts with the requirements of super-resolution reconstruction, as discussed for the EDSR family by Lim et al.~\cite{lim2017enhanced} in Section~\ref{subsec:dl_foundations}. The three bodies described in the remainder of this section fill the body stage $\mathcal{B}$ of Figure~\ref{fig:generator_skeleton} with progressively different trade-offs between depth and parameter count.
 
 
 \subsection{Modified Super-Resolution Residual Network}
 \label{subsec:method_generators_srresnet}
 
-The Modified Super-Resolution Residual Network (MSRResNet) generator instantiates the common skeleton of Equation~(\ref{eq:generator_pipeline}) with a body composed of a stack of identical residual blocks. Each residual block has the structure
+The Modified Super-Resolution Residual Network (MSRResNet) generator fills the body stage of the common skeleton with a stack of identical residual blocks. The generator follows the SRResNet design of Ledig et al.~\cite{cvf_srgan}, shown in Figure~\ref{fig:arch_msrresnet}, with the Batch Normalization layers of the original removed for the reason stated in the common design.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.9\textwidth]{figures/arch_msrresnet.png}
+\caption{SRResNet generator, after Ledig et al.~\cite{cvf_srgan}.}
+\label{fig:arch_msrresnet}
+\end{figure}
+
+Each residual block has the structure
 \begin{equation}
     x_{i+1} = x_i + \lambda \cdot \mathrm{Conv}_{3 \times 3}\!\bigl( \mathrm{ReLU}\bigl( \mathrm{Conv}_{3 \times 3}(x_i) \bigr) \bigr),
     \label{eq:srresnet_block}
 \end{equation}
-where both convolutions operate at the body width $C_f$ and $\lambda \in (0, 1)$ is a constant residual-scaling factor that stabilizes the optimization of the residual stack. No normalization layer is used inside the block. The body of the generator is the composition of $N_B^{\mathrm{MSR}}$ such blocks. The upsampling tail follows the structure of the common skeleton but, in contrast to the other two generators, inserts a ReLU non-linearity after each pixel-shuffle operator.
+where both convolutions operate at the body width $C_f$ and $\lambda \in (0, 1)$ is a constant residual-scaling factor that stabilizes the optimization of the residual stack. The body of the generator is the composition of $N_B^{\mathrm{MSR}}$ such blocks. The upsampling tail follows the common skeleton but, in contrast to the other two generators, inserts a ReLU non-linearity after each pixel-shuffle operator. With the smallest block count of the three bodies, MSRResNet is the shallow end of the depth-versus-capacity comparison of the first experimental contrast.
 
 
 \subsection{Enhanced Deep Super-Resolution}
 \label{subsec:method_generators_edsr}
 
-The Enhanced Deep Super-Resolution (EDSR) generator instantiates the common skeleton with a body that uses the same residual block as MSRResNet, defined by Equation~(\ref{eq:srresnet_block}), and the same body width $C_f$ and residual-scaling factor $\lambda$. The body depth $N_B^{\mathrm{EDSR}}$ is chosen larger than $N_B^{\mathrm{MSR}}$, so that the two generators differ in body depth while sharing every other component of the skeleton. The upsampling tail uses sub-pixel convolution as in the common skeleton but does not apply a non-linearity after the pixel-shuffle operators. The generator is trained on the coarse-grid input alone, in the same regime as MSRResNet but with a deeper body, which makes it the deep end of the depth-versus-capacity comparison of the first experimental contrast.
+The Enhanced Deep Super-Resolution (EDSR) generator of Lim et al.~\cite{lim2017enhanced}, shown in Figure~\ref{fig:arch_edsr}, fills the body stage with the same residual block as MSRResNet, defined by Equation~(\ref{eq:srresnet_block}), at the same body width $C_f$ and residual-scaling factor $\lambda$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{figures/arch_edsr.png}
+\caption{EDSR generator, after Lim et al.~\cite{lim2017enhanced}.}
+\label{fig:arch_edsr}
+\end{figure}
+
+EDSR and MSRResNet thus use the same residual block without Batch Normalization, the EDSR form of which is shown in Figure~\ref{fig:arch_edsr_block}, and differ only in body depth: the EDSR body depth $N_B^{\mathrm{EDSR}}$ is chosen larger than $N_B^{\mathrm{MSR}}$.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[height=0.25\textheight]{figures/arch_edsr_block.png}
+\caption{EDSR residual block, after Lim et al.~\cite{lim2017enhanced}.}
+\label{fig:arch_edsr_block}
+\end{figure}
+
+The upsampling tail uses sub-pixel convolution as in the common skeleton but does not apply a non-linearity after the pixel-shuffle operators. Trained on the coarse-grid input in the same regime as MSRResNet but with a deeper body, EDSR is the deep end of the depth-versus-capacity comparison.
 
 
 \subsection{Residual Feature Distillation Network}
 \label{subsec:method_generators_rfdn}
 
-The Residual Feature Distillation Network (RFDN)~\cite{liu2020rfdn}, introduced in Section~\ref{subsec:dl_foundations}, instantiates the common skeleton with a body composed of residual feature distillation blocks at a smaller body width $C_f^{\mathrm{RFDN}} < C_f$ than MSRResNet and EDSR.
+The Residual Feature Distillation Network (RFDN) of Liu et al.~\cite{liu2020rfdn}, introduced in Section~\ref{subsec:dl_foundations} and shown in Figure~\ref{fig:arch_rfdn}, fills the body stage with residual feature distillation blocks (RFDBs) at a smaller body width $C_f^{\mathrm{RFDN}} < C_f$ than MSRResNet and EDSR. Rather than reaching capacity through depth, RFDN reaches it through the richer internal structure of its block.
 
-The residual feature distillation block has an internal structure with two interleaved paths. Let $x$ denote the input to the block, with channel dimension $C_f^{\mathrm{RFDN}}$. The block produces three intermediate refinement tensors $r_1, r_2, r_3$ at the same channel dimension as $x$ through the recurrence
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/arch_rfdn.png}
+\caption{RFDN architecture, after Liu et al.~\cite{liu2020rfdn}.}
+\label{fig:arch_rfdn}
+\end{figure}
+
+The block has two interleaved paths, shown in Figure~\ref{fig:arch_rfdb_block}. Let $x$ denote the input to the block, with channel dimension $C_f^{\mathrm{RFDN}}$. The refinement path produces three intermediate tensors $r_1, r_2, r_3$ at the same channel dimension as $x$ through the recurrence
 \begin{equation}
     r_k = \mathrm{LeakyReLU}\!\bigl( \mathrm{Conv}_{3 \times 3}( r_{k-1} ) + r_{k-1} \bigr), \quad k = 1, 2, 3, \quad r_0 = x,
     \label{eq:rfdb_refine}
 \end{equation}
-and four distillation tensors $d_1, d_2, d_3, d_4$ at a reduced channel dimension $C_d = C_f^{\mathrm{RFDN}} / 2$ through
+and the distillation path produces four tensors $d_1, d_2, d_3, d_4$ at a reduced channel dimension $C_d = C_f^{\mathrm{RFDN}} / 2$ through
 \begin{equation}
 \begin{aligned}
     d_k &= \mathrm{LeakyReLU}\!\bigl( \mathrm{Conv}_{1 \times 1}( r_{k-1} ) \bigr), \quad k = 1, 2, 3, \\
@@ -122,9 +219,16 @@ and four distillation tensors $d_1, d_2, d_3, d_4$ at a reduced channel dimensio
 \end{aligned}
 \label{eq:rfdb_distill}
 \end{equation}
-The first three distillation tensors are compact $1 \times 1$ projections of the successive refinement tensors, and the last is a $3 \times 3$ projection of the deepest. The four distillation tensors are concatenated along the channel axis and fused by a $1 \times 1$ convolution into a tensor of the original channel dimension $C_f^{\mathrm{RFDN}}$, which is then passed through a spatial attention sub-network that computes a per-pixel attention map and re-weights the input features. The output of the block is the sum of the attention-weighted tensor and the block input $x$.
+The first three distillation tensors are compact $1 \times 1$ projections of the successive refinement tensors, and the last is a $3 \times 3$ projection of the deepest.
 
-The outputs of all body blocks are fused into a single feature tensor before the body tail convolution: the outputs of the $N_B^{\mathrm{RFDN}}$ blocks are concatenated along the channel axis and a $1 \times 1$ convolution reduces the channel dimension back to $C_f^{\mathrm{RFDN}}$. This fused tensor is the $F_B$ of Equation~(\ref{eq:generator_pipeline}); it is then passed through the body tail convolution $\mathcal{C}$ and added to the head output through the long skip connection, so that the head, the long skip connection, the upsampling tail, and the output projection of the common skeleton are inherited unchanged. The upsampling tail uses sub-pixel convolution as in the common skeleton without a non-linearity after the pixel-shuffle operators. It uses fewer body blocks of richer internal structure and has a lower parameter count than MSRResNet and EDSR, contributing a third combination of depth and parameter count to the first experimental contrast.
+\begin{figure}[ht]
+\centering
+\includegraphics[height=0.5\textwidth]{figures/arch_rfdb_block.png}
+\caption{RFDB, after Liu et al.~\cite{liu2020rfdn}.}
+\label{fig:arch_rfdb_block}
+\end{figure}
+
+The four distillation tensors are concatenated along the channel axis and fused by a $1 \times 1$ convolution into a tensor of the original channel dimension $C_f^{\mathrm{RFDN}}$, which is then passed through the enhanced spatial attention sub-network of Figure~\ref{fig:arch_rfdb_block} that computes a per-pixel attention map and re-weights the input features. The output of the block is the sum of the attention-weighted tensor and the block input $x$. The outputs of the $N_B^{\mathrm{RFDN}}$ body blocks are concatenated along the channel axis and reduced by a $1 \times 1$ convolution back to the body width $C_f^{\mathrm{RFDN}}$. The resulting tensor is the body output $F_B$ of the common skeleton, after which the body tail convolution, the long skip connection, the upsampling tail, and the output projection of Figure~\ref{fig:generator_skeleton} are inherited unchanged; the upsampling tail uses sub-pixel convolution without a non-linearity after the pixel-shuffle operators. With fewer body blocks of richer internal structure and the lowest parameter count of the three, RFDN contributes a third combination of depth and parameter count to the first experimental contrast.
 
 
 \section{Discriminator}
@@ -296,7 +400,7 @@ All trained generators are evaluated against the fixed suite of metrics formaliz
 
 The acceptance bounds of Table~\ref{tab:metric_suite} are tied to the dynamic range of the reconstruction targets defined in the problem formulation. Because the fine-grid fields are smooth almost everywhere outside the displacement fronts, a faithful reconstruction concentrates its point-wise error on a small fraction of the spatial domain, and the bounds on PSNR, GMAE, and ERGAS lie at the level that separates such a reconstruction from one in which the error spreads across the smooth interior. The structural similarity score, in turn, is upper-bounded by the contribution of the sharp transitions at the displacement fronts even when the reconstruction agrees with the target outside them, and the SSIM bound is positioned at the corresponding regime-specific value. A candidate generator is accepted only when its point-wise error stays below the levels appropriate to the physical fields and its local structure around the fronts is preserved.
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering
 \caption{Evaluation suite.}
 \label{tab:metric_suite}
