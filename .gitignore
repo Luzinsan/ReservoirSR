@@ -15,7 +15,44 @@ venv/
 # IDE
 .vs/
 .idea/
+.vscode/
 
 torch-cu121/*
 memory/*
 datasets/*
+
+
+# Build folder
+build/
+
+# LaTeX auxiliary files
+*.aux
+*.bbl
+*.blg
+*.bcf
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run*
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.idx
+*.ind
+*.nav
+*.snm
+*.vrb
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+
+# Editor
+.DS_Store
+*.swp
+reservoir_sr_studio/src/dataset_out/*
