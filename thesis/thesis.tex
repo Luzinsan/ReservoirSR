@@ -93,7 +93,7 @@
   label=(\arabic*),
 }
 
-% \setcounter{secnumdepth}{4}
+\setcounter{secnumdepth}{3}
 \captionsetup[table]{labelfont={normalfont}, name={TABLE}, labelsep={newline}}
 \setlength{\parindent}{2em} 
 \DeclareCaptionLabelSeparator{figSep}{.\quad}
@@ -112,19 +112,24 @@
 
 \pagestyle{fancyplain}
 
-% remember section title
-\renewcommand{\chaptermark}[1]%
-	{\markboth{\chaptername~\thechapter~--~#1}{}}
+% Метки колонтитула: последний отображаемый уровень заголовка
+\renewcommand{\chaptermark}[1]{\markboth{\thechapter\ #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection\ #1}}
+\renewcommand{\subsectionmark}[1]{\markright{\thesubsection\ #1}}
 
-% subsection number and title
-\renewcommand{\sectionmark}[1]%
-	{\markright{\thesection\ #1}}
+\makeatletter
+\newcommand{\headlabel}{%
+  \ifx\rightmark\@empty \leftmark \else \rightmark \fi}
+\makeatother
 
-\rhead[\fancyplain{}{\bf\leftmark}]%
-      {\fancyplain{}{\bf\thepage}}
-\lhead[\fancyplain{}{\bf\thepage}]%
-      {\fancyplain{}{\bf\rightmark}}
-\cfoot{} %bfseries
+% Слева — текущий уровень (глава/секция/подсекция), справа — номер страницы
+\lhead{\bfseries\nouppercase{\rightmark}}
+\chead{}
+\rhead{\bfseries\thepage}
+\lfoot{}
+\cfoot{}
+\rfoot{}
+\renewcommand{\headrulewidth}{0.4pt}   % линия под шапкой (подчёркивание)
 
 
 \newcommand{\dedication}[1]
@@ -158,12 +163,13 @@
 \include{chapters/abstract}
 
 \pagestyle{fancyplain}
-\fancypagestyle{plain}{
-  \fancyhf{}
-  \fancyfoot[C]{\bfseries\thepage}
-  \renewcommand{\headrulewidth}{0pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \lhead{\bfseries\nouppercase{\headlabel}}%
+  \rhead{\bfseries\thepage}%
+  \renewcommand{\headrulewidth}{0.4pt}%
 }
-\setcounter{page}{8}
+\setcounter{page}{7}
 
 \include{chapters/chapter1}
 \include{chapters/chapter2}
